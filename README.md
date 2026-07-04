@@ -96,7 +96,7 @@ briefly doctor
 
 ### Konfiguration und Sprachqualität-Optimierung (TTS)
 
-Briefly enthält eine integrierte Text-Bereinigung (Preprocessing) vor der Sprachausgabe durch Piper. Diese entfernt automatisch störende Formatierungen wie Markdown (Auszeichnungen, Links, Überschriften, Listenpunkte), HTML-Tags, Code-Blöcke und Tabellen, und normalisiert die Interpunktion (z.B. Anführungszeichen, Bindestriche, mehrfache Satzzeichen).
+Briefly enthält eine integrierte Text-Bereinigung (Preprocessing) vor der Sprachausgabe durch Piper. Diese entfernt automatisch störende Formatierungen wie Markdown (Auszeichnungen, Links, Überschriften, Listenpunkte), HTML-Tags, Code-Blöcke, Tabellen und Emojis, normalisiert die Interpunktion (z.B. Anführungszeichen, Bindestriche, mehrfache Satzzeichen) und Leerzeichen, und expandiert sprachspezifisch gängige Abkürzungen (z.B. "z.B." zu "zum Beispiel" im Deutschen, "e.g." zu "for example" im Englischen) für eine flüssige Audio-Ausgabe.
 
 Zusätzlich können über die Web-Oberfläche (unter Einstellungen) oder direkt in der `config.yaml` folgende Werte konfiguriert werden, um die Sprachqualität und den Lesefluss zu optimieren:
 

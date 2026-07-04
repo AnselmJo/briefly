@@ -61,3 +61,53 @@ def test_preprocess_splits_paragraphs_on_double_newlines():
         "Paragraph 1.",
         "Paragraph 2. With a second line.",
     ]
+
+
+def test_preprocess_strips_emojis():
+    text = "Hello 😀 world 🚀! Check this rain 🌧️ or sun ☀."
+    paragraphs = preprocess_text(text)
+    assert paragraphs == ["Hello world! Check this rain or sun."]
+
+
+def test_preprocess_expands_german_abbreviations():
+    text = "Das ist z.B. ein Test, d.h. es u.a. bzw. etc. funktionieren sollte."
+    paragraphs = preprocess_text(text, language="de")
+    assert paragraphs == [
+        "Das ist zum Beispiel ein Test, das heißt es unter anderem beziehungsweise und so weiter funktionieren sollte."
+    ]
+
+
+def test_preprocess_expands_english_abbreviations():
+    text = "This is e.g. a test, i.e. it should work approx. vs. others, etc."
+    paragraphs = preprocess_text(text, language="en")
+    assert paragraphs == [
+        "This is for example a test, that is it should work approximately versus others, and so on"
+    ]
+
+
+def test_preprocess_markdown_heavy_input():
+    text = """
+# Heading of the Day
+
+Here is a **bold** statement. Let's see if we strip emojis like 🚀.
+Check out [Briefly](https://github.com/AnselmJo/briefly) for more details!
+
+```python
+# Unspeakable code block
+print("Hello World")
+```
+
+| Header 1 | Header 2 |
+|---|---|
+| Unspeakable | Table |
+
+- Bullet items like Dr. Müller's phone number.
+- And etc. in German (z.B. u.a.).
+"""
+    # German run
+    paragraphs_de = preprocess_text(text, language="de")
+    assert paragraphs_de == [
+        "Here is a bold statement. Let's see if we strip emojis like. Check out Briefly for more details!",
+        "Bullet items like Doktor Müller's phone number.",
+        "And und so weiter in German (zum Beispiel unter anderem)."
+    ]

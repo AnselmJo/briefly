@@ -43,7 +43,7 @@ class PiperSpeechSynthesisProvider:
         voice = self._load_voice(language)
         output_wav_path.parent.mkdir(parents=True, exist_ok=True)
 
-        paragraphs = preprocess_text(segment.text)
+        paragraphs = preprocess_text(segment.text, language)
         syn_config = SynthesisConfig(length_scale=self.length_scale)
 
         with wave.open(str(output_wav_path), "wb") as wav_file:
