@@ -355,8 +355,8 @@ def run_install(interactive: bool = True) -> int:
     print_status("Ollama Installation", ollama_installed, info="Installiert" if ollama_installed else "Fehlt")
     print_status("Ollama Dienst aktiv", ollama_running, info="Aktiv" if ollama_running else "Nicht aktiv")
     print_status(f"Ollama Modell '{model_name}'", model_ok, info="Vorhanden" if model_ok else "Fehlt")
-    print_status("Piper Stimme (DE)", voice_de_ok, info="Geladen" if voice_de_ok else "Fehlt")
-    print_status("Piper Stimme (EN)", voice_en_ok, info="Geladen" if voice_en_ok else "Fehlt")
+    print_status("Piper Stimme (DE)", voice_de_ok, warning=not voice_de_ok, info="Geladen" if voice_de_ok else "Fehlt (kann gleich installiert werden)")
+    print_status("Piper Stimme (EN)", voice_en_ok, warning=not voice_en_ok, info="Geladen" if voice_en_ok else "Fehlt (kann gleich installiert werden)")
     print_status("Webserver-Konfiguration", web_config_ok, warning=not web_config_ok, info="Optimal" if web_config_ok else "Warnung")
     
     if scheduler.is_macos():
@@ -367,6 +367,46 @@ def run_install(interactive: bool = True) -> int:
         print_status("Hintergrund-Dienste", False, warning=True, info="Nur auf macOS/Windows verfügbar")
         
     print("=" * 70)
+
+    # 12. Piper-Stimmen herunterladen falls erforderlich
+    download_de = not voice_de_ok
+    download_en = not voice_en_ok
+    
+    if download_de or download_en:
+        confirm_download = False
+        if interactive:
+            print("\n--- Piper-Stimmen herunterladen ---")
+            print("Folgende benötigte Stimmen fehlen auf deinem System:")
+            if download_de:
+                print(f"  * Deutsch: {voice_de}")
+            if download_en:
+                print(f"  * Englisch: {voice_en}")
+            print("Möchtest du diese Stimmen jetzt automatisch herunterladen? (Y/n): ", end="")
+            sys.stdout.flush()
+            try:
+                response = sys.stdin.readline().strip().lower()
+                confirm_download = response in ("", "y", "yes")
+            except Exception:
+                confirm_download = False
+        else:
+            confirm_download = True
+            
+        if confirm_download:
+            voices_dir.mkdir(parents=True, exist_ok=True)
+            for lang, voice, needed in [("DE", voice_de, download_de), ("EN", voice_en, download_en)]:
+                if needed:
+                    print(f"Lade Stimme ({lang}) herunter: {voice}...")
+                    try:
+                        subprocess.run(
+                            [sys.executable, "-m", "piper.download_voices", voice, "--data-dir", str(voices_dir)],
+                            check=True
+                        )
+                        if lang == "DE":
+                            voice_de_ok = True
+                        else:
+                            voice_en_ok = True
+                    except Exception as e:
+                        print(f"Fehler beim Herunterladen der Stimme {voice}: {e}")
 
     # Behebungsanweisungen ausgeben falls Fehler vorhanden sind
     fatal_error = not python_ok or bool(missing_deps) or not dirs_ok or not disk_space_ok or not ffmpeg_ok or not port_ok or not ollama_installed or not ollama_running or not model_ok or not voice_de_ok or not voice_en_ok

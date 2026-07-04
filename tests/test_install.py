@@ -1,6 +1,8 @@
 import pytest
+import sys
+import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 
 from briefly.install import (
     check_piper_voice,
@@ -343,13 +345,46 @@ def test_run_install_voices_missing(tmp_path, capsys):
          patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
          patch("briefly.install.is_ollama_running", return_value=True), \
          patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
-         patch("briefly.install.check_piper_voice", return_value=False):
+         patch("briefly.install.check_piper_voice", side_effect=[False, False, True, True]):
          
         mock_run.return_value = MagicMock(returncode=0)
         ret = run_install(interactive=False)
+        assert ret == 0
+        
+        # Verify subprocess.run was called to download the voice packages
+        mock_run.assert_any_call(
+            [sys.executable, "-m", "piper.download_voices", "de_voice", "--data-dir", ANY],
+            check=True
+        )
+        mock_run.assert_any_call(
+            [sys.executable, "-m", "piper.download_voices", "en_voice", "--data-dir", ANY],
+            check=True
+        )
+
+
+def test_run_install_voices_missing_download_fails(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    def side_effect_run(cmd, *args, **kwargs):
+        if "piper.download_voices" in cmd:
+            raise subprocess.CalledProcessError(1, cmd, stderr="Network error")
+        return MagicMock(returncode=0)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run", side_effect=side_effect_run), \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
+         patch("briefly.install.check_piper_voice", return_value=False):
+         
+        ret = run_install(interactive=False)
         assert ret == 1
         captured = capsys.readouterr()
-        assert "Piper-Stimme" in captured.out
+        assert "Fehler beim Herunterladen der Stimme" in captured.out
 
 
 def test_run_install_ollama_model_missing_pulls_automatically(tmp_path):
