@@ -38,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
             from briefly.install import run_install
             return run_install(interactive=True)
 
+        if args.command == "doctor":
+            from briefly.doctor import run_doctor
+            return run_doctor()
+
         config = _load_config_or_exit(Path(args.config))
 
         commands = {
@@ -147,7 +151,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="briefly", description="Briefly – tägliches Audio-Briefing")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG_PATH), help="Pfad zur config.yaml")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("run", "collect", "curate", "script", "audio", "deliver", "install"):
+    for name in ("run", "collect", "curate", "script", "audio", "deliver", "install", "doctor"):
         subparsers.add_parser(name)
     return parser
 

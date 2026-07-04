@@ -82,7 +82,15 @@ briefly script
 briefly audio
 briefly deliver
 ```
-(--to do: zu ergänzen: briefly setup & briefly doctor,briefly update, briefly run (einmalig setup alles und einmalig testen, um Eingaben zu minieren))
+
+### System-Diagnose
+
+Um den Zustand deines Systems und der konfigurierten Dienste zu prüfen, steht das Diagnose-Tool `briefly doctor` bereit. Es führt automatische Tests für alle benötigten Systemressourcen, Verbindungen, Modelle, Stimmen und Dienste durch und gibt Empfehlungen zur Fehlerbehebung:
+
+```bash
+briefly doctor
+```
+
 
 
 Web-Oberfläche starten (Eingaben/Einstellungen + Feed-Auslieferung):
