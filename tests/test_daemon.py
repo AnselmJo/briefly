@@ -66,9 +66,16 @@ def test_terminate_pid():
 @patch("subprocess.Popen")
 @patch("socket.socket")
 @patch("briefly.scheduler.register_daily_run", return_value=True)
-def test_start_daemon_success(mock_register, mock_socket, mock_popen, mock_config):
+@patch("urllib.request.urlopen")
+@patch("briefly.daemon.get_local_ip", return_value="192.168.1.50")
+def test_start_daemon_success(mock_get_ip, mock_urlopen, mock_register, mock_socket, mock_popen, mock_config):
     # Mock socket connect fails (port is free)
     mock_socket.return_value.connect.side_effect = Exception("Free")
+    
+    # Mock urlopen returns 200 response
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_urlopen.return_value.__enter__.return_value = mock_response
     
     mock_proc = MagicMock()
     mock_proc.pid = 12345
@@ -86,7 +93,8 @@ def test_start_daemon_success(mock_register, mock_socket, mock_popen, mock_confi
 
 
 @patch("socket.socket")
-def test_start_daemon_port_busy(mock_socket, mock_config):
+@patch("briefly.daemon.get_local_ip", return_value="192.168.1.50")
+def test_start_daemon_port_busy(mock_get_ip, mock_socket, mock_config):
     # Mock socket connect succeeds (port is busy)
     mock_socket.return_value.connect.return_value = None
 
@@ -118,14 +126,17 @@ def test_stop_daemon_success(mock_running, mock_terminate, mock_config):
 
 @patch("briefly.scheduler.check_daily_run_status", return_value=(True, "OK"))
 @patch("briefly.daemon.is_pid_running", return_value=True)
-@patch("socket.socket")
-def test_status_daemon_active(mock_socket, mock_running, mock_check, mock_config):
+@patch("urllib.request.urlopen")
+@patch("briefly.daemon.get_local_ip", return_value="192.168.1.50")
+def test_status_daemon_active(mock_get_ip, mock_urlopen, mock_running, mock_check, mock_config, capsys):
     from briefly.config import get_user_dir
     pid_file = get_user_dir() / "web_server.pid"
     pid_file.write_text("12345", encoding="utf-8")
     
-    # Mock socket connect succeeds (port is responsive)
-    mock_socket.return_value.connect.return_value = None
+    # Mock urlopen returns 200 response
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_urlopen.return_value.__enter__.return_value = mock_response
     
     # Write mock last_run.json
     last_run_file = get_user_dir() / "last_run.json"
@@ -136,17 +147,30 @@ def test_status_daemon_active(mock_socket, mock_running, mock_check, mock_config
     
     ret = status_daemon(mock_config)
     assert ret == 0
+    captured = capsys.readouterr()
+    assert "Prozess läuft:       Ja" in captured.out
+    assert "Lokal erreichbar:    Ja" in captured.out
+    assert "WLAN/LAN erreichbar: Ja" in captured.out
 
 
 @patch("briefly.scheduler.check_daily_run_status", return_value=(False, "Uninstalled"))
 @patch("briefly.daemon.is_pid_running", return_value=False)
-def test_status_daemon_inactive(mock_running, mock_check, mock_config):
+@patch("urllib.request.urlopen")
+@patch("briefly.daemon.get_local_ip", return_value="192.168.1.50")
+def test_status_daemon_inactive(mock_get_ip, mock_urlopen, mock_running, mock_check, mock_config, capsys):
     from briefly.config import get_user_dir
     pid_file = get_user_dir() / "web_server.pid"
     pid_file.unlink(missing_ok=True)
     
+    # Mock urlopen fails (inactive)
+    mock_urlopen.side_effect = Exception("Unreachable")
+    
     ret = status_daemon(mock_config)
     assert ret == 1  # 1 because web server is inactive / scheduler is missing
+    captured = capsys.readouterr()
+    assert "Prozess läuft:       Nein" in captured.out
+    assert "Lokal erreichbar:    Nein" in captured.out
+    assert "WLAN/LAN erreichbar: Nein" in captured.out
 
 
 @patch("briefly.daemon.stop_daemon", return_value=0)

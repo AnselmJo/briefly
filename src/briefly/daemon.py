@@ -11,11 +11,14 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 
 from briefly import scheduler
 from briefly.config import get_user_dir, load_config
+from briefly.doctor import get_local_ip
 
 
 def is_pid_running(pid: int) -> bool:
@@ -88,7 +91,8 @@ def start_daemon(config_path: Path) -> int:
         try:
             pid = int(pid_file.read_text(encoding="utf-8").strip())
             if is_pid_running(pid):
-                print(f"Webserver läuft bereits (PID {pid}, http://{config.web.host}:{config.web.port})")
+                lan_ip = get_local_ip()
+                print(f"Webserver läuft bereits (PID {pid}, http://{lan_ip}:{config.web.port})")
                 return 0
         except ValueError:
             pass
@@ -146,7 +150,50 @@ def start_daemon(config_path: Path) -> int:
         
         # Write PID
         pid_file.write_text(str(p.pid), encoding="utf-8")
-        print(f"Webserver im Hintergrund gestartet (PID {p.pid}, http://{config.web.host}:{config.web.port})")
+        
+        # Self-check reachability (localhost)
+        local_url = f"http://127.0.0.1:{config.web.port}/"
+        localhost_reachable = False
+        for _ in range(15):
+            try:
+                with urllib.request.urlopen(local_url, timeout=1.0) as response:
+                    if response.status == 200:
+                        localhost_reachable = True
+                        break
+            except Exception:
+                time.sleep(0.3)
+                
+        if not localhost_reachable:
+            print("Fehler: Der Webserver konnte nicht gestartet werden oder reagiert nicht auf localhost.", file=sys.stderr)
+            try:
+                pid_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return 1
+            
+        # Self-check reachability (LAN IP)
+        lan_ip = get_local_ip()
+        lan_url = f"http://{lan_ip}:{config.web.port}/"
+        lan_reachable = False
+        try:
+            with urllib.request.urlopen(lan_url, timeout=1.5) as response:
+                if response.status == 200:
+                    lan_reachable = True
+        except Exception:
+            pass
+            
+        if lan_reachable:
+            print(f"Webserver erfolgreich gestartet (PID {p.pid}).")
+            print(f"Erreichbar unter:\n  Lokal:   {local_url}\n  WLAN/LAN: {lan_url}")
+        else:
+            print(f"Webserver erfolgreich gestartet (PID {p.pid}), aber NUR lokal erreichbar.")
+            print(f"Erreichbar unter:\n  Lokal:   {local_url}")
+            print(f"WLAN/LAN ({lan_url}) ist nicht erreichbar.")
+            if sys.platform == "darwin":
+                print("Hinweis: Möglicherweise blockiert die macOS-Firewall den Zugriff.")
+                print("Behebung: Gehe zu 'Systemeinstellungen > Netzwerk > Firewall' und erlaube eingehende Verbindungen für Python/Uvicorn.")
+            else:
+                print("Hinweis: Möglicherweise blockiert eine Firewall oder Antivirensoftware eingehende Verbindungen auf Port 8787.")
     except Exception as e:
         print(f"Fehler beim Starten des Webservers: {e}", file=sys.stderr)
         return 1
@@ -213,26 +260,37 @@ def status_daemon(config_path: Path) -> int:
     pid_file = user_dir / "web_server.pid"
     
     # 1. Web server check
-    web_active = False
+    process_alive = False
     web_pid = None
     if pid_file.exists():
         try:
             pid = int(pid_file.read_text(encoding="utf-8").strip())
             if is_pid_running(pid):
-                web_active = True
+                process_alive = True
                 web_pid = pid
         except ValueError:
             pass
 
-    # Also double check with socket connection if PID check says active
-    if web_active:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(0.5)
-            s.connect(("127.0.0.1", config.web.port))
-            s.close()
-        except Exception:
-            web_active = False
+    # Check local reachability
+    locally_reachable = False
+    local_url = f"http://127.0.0.1:{config.web.port}/"
+    try:
+        with urllib.request.urlopen(local_url, timeout=0.5) as response:
+            if response.status == 200:
+                locally_reachable = True
+    except Exception:
+        pass
+
+    # Check LAN reachability
+    lan_reachable = False
+    lan_ip = get_local_ip()
+    lan_url = f"http://{lan_ip}:{config.web.port}/"
+    try:
+        with urllib.request.urlopen(lan_url, timeout=0.5) as response:
+            if response.status == 200:
+                lan_reachable = True
+    except Exception:
+        pass
 
     # 2. Scheduler check
     sched_installed, _ = scheduler.check_daily_run_status()
@@ -273,8 +331,12 @@ def status_daemon(config_path: Path) -> int:
     print("======================================================================")
     print("                      Briefly System-Status")
     print("======================================================================")
-    web_status_text = f"Aktiv (PID {web_pid}, http://{config.web.host}:{config.web.port})" if web_active else "Inaktiv"
+    web_active = process_alive or locally_reachable
+    web_status_text = f"Aktiv (PID {web_pid if web_pid else 'Unbekannt'}, {lan_url})" if web_active else "Inaktiv"
     print(f"Webserver:      {web_status_text}")
+    print(f"  - Prozess läuft:       {'Ja' if process_alive else 'Nein'}")
+    print(f"  - Lokal erreichbar:    {'Ja' if locally_reachable else 'Nein'}")
+    print(f"  - WLAN/LAN erreichbar: {'Ja' if lan_reachable else 'Nein'}")
     print(f"Scheduler:      {'Installiert' if sched_installed else 'Nicht installiert'}")
     print(f"Letzter Lauf:   {last_run_str}")
     print(f"Nächster Lauf:  {next_run_str}")
