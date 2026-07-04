@@ -94,18 +94,19 @@ sources:
     - disaster
 
 # --- SEGMENTS ---
-# Struktur und Reihenfolge der Episodenteile.
+# Struktur, Aktivierungsstatus und Reihenfolge der Episodenteile.
 segments:
-  # Reihenfolge der Abschnitte in einer Daily Cast Folge.
-  # Mögliche Segmente: intro, weather, calendar, news, topics, outro, affirmation, fun_fact.
-  profile:
-    - intro
-    - news
-    - topics
-    - outro
-  
-  # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
-  target_minutes: 10
+  - id: intro
+    enabled: true
+  - id: news
+    enabled: true
+  - id: topics
+    enabled: true
+  - id: outro
+    enabled: true
+
+# Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
+target_minutes: 10
 
 # --- SCHEDULE ---
 # Zeitplanung für den täglichen Lauf (macOS launchd Integration).

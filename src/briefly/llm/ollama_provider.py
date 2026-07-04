@@ -28,6 +28,10 @@ class OllamaLanguageModelProvider:
         self.model = model
         self.target_minutes = target_minutes
 
+    def generate_segment_text(self, prompt: str) -> str:
+        response = ollama.chat(model=self.model, messages=[{"role": "user", "content": prompt}])
+        return response["message"]["content"].strip()
+
     def generate_script(
         self, items_by_segment: dict[str, list[Item]], target_language: str
     ) -> EpisodeScript:

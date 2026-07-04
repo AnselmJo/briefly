@@ -84,8 +84,8 @@ schedule:
     assert config.sources.rss.feeds[0].weight == 1.5
     assert config.sources.topics.include == ["tag1"]
     assert config.sources.exclude_keywords == ["badword"]
-    assert config.segments.profile == ["intro", "outro"]
-    assert config.segments.target_minutes == 5
+    assert config.segment_profile == ["intro", "outro"]
+    assert config.target_minutes == 5
     assert config.schedule.hour == 6
     assert config.schedule.minute == 15
 
@@ -102,9 +102,9 @@ schedule:
         ("tts:\n  paragraph_pause_ms: -10", "tts.paragraph_pause_ms"),
         ("tts:\n  language: ''", "tts.language"),
         ("llm:\n  model: ''", "llm.model"),
-        ("segments:\n  target_minutes: 0", "segments.target_minutes"),
-        ("segments:\n  profile: []", "segments.profile"),
-        ("segments:\n  profile: ['']", "segments.profile"),
+        ("segments:\n  target_minutes: 0", "target_minutes"),
+        ("segments:\n  profile: []", "segments"),
+        ("segments:\n  profile: ['']", "segments.0.id"),
         ("schedule:\n  hour: 25", "schedule.hour"),
         ("schedule:\n  minute: -1", "schedule.minute"),
         ("sources:\n  rss:\n    feeds:\n      - url: invalid_url", "sources.rss.feeds.0.url"),

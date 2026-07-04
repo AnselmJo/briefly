@@ -17,3 +17,7 @@ class LanguageModelProvider(Protocol):
     ) -> EpisodeScript:
         """Erzeugt ein Sprechtext-Skript mit einem Segment je Eintrag in `items_by_segment`."""
         ...
+
+    def generate_segment_text(self, prompt: str) -> str:
+        """Generiert den Rohtext für ein einzelnes Segment basierend auf einem Prompt."""
+        ...

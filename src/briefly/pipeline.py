@@ -20,9 +20,6 @@ from briefly.delivery.local_feed import LocalFeedDeliveryTarget
 from briefly.llm.base import LanguageModelProvider
 from briefly.llm.ollama_provider import OllamaLanguageModelProvider
 from briefly.models import EpisodeManifest, EpisodeScript, Item
-from briefly.sources.base import ContentSource
-from briefly.sources.inbox import InboxSource
-from briefly.sources.rss import RssSource
 from briefly.tts.base import SpeechSynthesisProvider
 from briefly.tts.piper_provider import PiperSpeechSynthesisProvider
 
@@ -30,21 +27,29 @@ logger = logging.getLogger(__name__)
 
 
 def run_collect(config: Config) -> list[Item]:
-    """Stufe 1: sammelt Items aus allen konfigurierten Quellen.
+    """Stufe 1: sammelt Items aus allen aktivierten Segmenten.
 
     Fällt eine Quelle aus, wird das geloggt und übersprungen – kein
     Totalausfall wegen einer einzelnen Quelle (Briefing §2.5).
     """
-    sources: list[ContentSource] = [
-        InboxSource(config.sources.inbox.path),
-        RssSource(config.sources.rss.feeds),
-    ]
+    from briefly.segments import get_segment_impl
     items: list[Item] = []
-    for source in sources:
+    
+    for seg_conf in config.segments:
+        if not seg_conf.enabled:
+            continue
+        segment_impl = get_segment_impl(seg_conf.id)
+        if not segment_impl:
+            continue
         try:
-            items.extend(source.fetch())
+            res = segment_impl.collect(config)
+            if isinstance(res, list):
+                for item in res:
+                    if item not in items:
+                        items.append(item)
         except Exception:
-            logger.exception("Quelle %s konnte nicht gelesen werden, wird übersprungen.", type(source).__name__)
+            logger.exception("Segment %s konnte keine Daten sammeln, wird übersprungen.", seg_conf.id)
+            
     return items
 
 
@@ -59,11 +64,35 @@ def run_script(
     config: Config,
     llm_provider: LanguageModelProvider | None = None,
 ) -> EpisodeScript:
-    """Stufe 3: lässt das LLM das Sprechtext-Skript schreiben."""
+    """Stufe 3: lässt das LLM das Sprechtext-Skript segmentweise schreiben."""
+    from briefly.segments import get_segment_impl
+    from briefly.models import ScriptSegment
+
     provider = llm_provider or OllamaLanguageModelProvider(
-        model=config.llm.model, target_minutes=config.episode.target_minutes
+        model=config.llm.model, target_minutes=config.target_minutes
     )
-    return provider.generate_script(grouped_items, config.language.target)
+    
+    script_segments: list[ScriptSegment] = []
+    
+    for seg_conf in config.segments:
+        if not seg_conf.enabled:
+            continue
+            
+        segment_id = seg_conf.id
+        segment_impl = get_segment_impl(segment_id)
+        if not segment_impl:
+            logger.warning("Keine Implementierung für Segment %s gefunden, wird übersprungen.", segment_id)
+            continue
+            
+        data = grouped_items.get(segment_id, [])
+        try:
+            text = segment_impl.script(config, data, provider, config.tts.language)
+            if text:
+                script_segments.append(ScriptSegment(name=segment_id, text=text))
+        except Exception:
+            logger.exception("Fehler beim Generieren des Skripts für Segment %s. Wird übersprungen.", segment_id)
+            
+    return EpisodeScript(segments=script_segments)
 
 
 def run_audio(

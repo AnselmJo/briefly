@@ -338,26 +338,16 @@ class DeliveryConfig(BaseModel):
         return v
 
 
-class SegmentsConfig(BaseModel):
-    profile: list[str] = Field(default_factory=lambda: list(DEFAULT_SEGMENT_PROFILE))
-    target_minutes: int = 10
+class SegmentConfig(BaseModel):
+    id: str
+    enabled: bool = True
 
-    @field_validator("profile")
+    @field_validator("id")
     @classmethod
-    def validate_profile(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("segments.profile list cannot be empty")
-        for item in v:
-            if not item.strip():
-                raise ValueError("segment names cannot be empty strings")
-        return v
-
-    @field_validator("target_minutes")
-    @classmethod
-    def validate_target_minutes(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("segments.target_minutes must be at least 1")
-        return v
+    def validate_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("segment ID cannot be empty")
+        return v.strip()
 
 
 class ScheduleConfig(BaseModel):
@@ -416,16 +406,16 @@ class LegacyWebProxy:
 
 
 class LegacyEpisodeProxy:
-    def __init__(self, segments_config: SegmentsConfig):
-        self._segments_config = segments_config
+    def __init__(self, config: Config):
+        self._config = config
 
     @property
     def target_minutes(self) -> int:
-        return self._segments_config.target_minutes
+        return self._config.target_minutes
 
     @target_minutes.setter
     def target_minutes(self, value: int) -> None:
-        self._segments_config.target_minutes = value
+        self._config.target_minutes = value
 
 
 # --- Main Configuration Model ---
@@ -435,29 +425,57 @@ class Config(BaseModel):
     tts: TtsConfig = Field(default_factory=TtsConfig)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
-    segments: SegmentsConfig = Field(default_factory=SegmentsConfig)
+    segments: list[SegmentConfig] = Field(default_factory=lambda: [
+        SegmentConfig(id="intro", enabled=True),
+        SegmentConfig(id="news", enabled=True),
+        SegmentConfig(id="topics", enabled=True),
+        SegmentConfig(id="outro", enabled=True),
+    ])
+    target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
+
+    @field_validator("segments")
+    @classmethod
+    def validate_segments(cls, v: list[SegmentConfig]) -> list[SegmentConfig]:
+        if not v:
+            raise ValueError("segments list cannot be empty")
+        return v
+
+    @field_validator("target_minutes")
+    @classmethod
+    def validate_target_minutes(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("target_minutes must be at least 1")
+        return v
 
     @model_validator(mode="before")
     @classmethod
     def migrate_legacy_keys(cls, data: Any) -> Any:
         """Migrates older configuration schemas/keys to the new grouped configuration schema."""
         if isinstance(data, dict):
-            # Migrate segment_profile -> segments.profile
+            # Migrate segment_profile -> segments list
             if "segment_profile" in data:
-                if "segments" not in data or not isinstance(data["segments"], dict):
-                    data["segments"] = {}
-                if "profile" not in data["segments"]:
-                    data["segments"]["profile"] = data.pop("segment_profile")
-            
-            # Migrate episode.target_minutes -> segments.target_minutes
+                profile = data.pop("segment_profile")
+                if isinstance(profile, list):
+                    data["segments"] = [{"id": s_id, "enabled": True} for s_id in profile]
+
+            # If segments is a dict, it's legacy
+            if "segments" in data and isinstance(data["segments"], dict):
+                seg_dict = data["segments"]
+                if "target_minutes" in seg_dict:
+                    data["target_minutes"] = seg_dict.pop("target_minutes")
+                if "profile" in seg_dict:
+                    profile = seg_dict.pop("profile")
+                    if isinstance(profile, list):
+                        data["segments"] = [{"id": s_id, "enabled": True} for s_id in profile]
+                else:
+                    data.pop("segments", None)
+
+            # Migrate episode.target_minutes -> target_minutes
             if "episode" in data:
                 episode_data = data.pop("episode")
                 if isinstance(episode_data, dict) and "target_minutes" in episode_data:
-                    if "segments" not in data or not isinstance(data["segments"], dict):
-                        data["segments"] = {}
-                    if "target_minutes" not in data["segments"]:
-                        data["segments"]["target_minutes"] = episode_data["target_minutes"]
+                    data["target_minutes"] = episode_data["target_minutes"]
                         
             # Migrate language.target -> tts.language
             if "language" in data:
@@ -508,7 +526,7 @@ class Config(BaseModel):
 
     @property
     def episode(self) -> LegacyEpisodeProxy:
-        return LegacyEpisodeProxy(self.segments)
+        return LegacyEpisodeProxy(self)
 
     @property
     def topics(self) -> TopicsConfig:
@@ -524,11 +542,11 @@ class Config(BaseModel):
 
     @property
     def segment_profile(self) -> list[str]:
-        return self.segments.profile
+        return [s.id for s in self.segments if s.enabled]
 
     @segment_profile.setter
     def segment_profile(self, value: list[str]) -> None:
-        self.segments.profile = value
+        self.segments = [SegmentConfig(id=s_id, enabled=True) for s_id in value]
 
 
 def get_user_dir() -> Path:
