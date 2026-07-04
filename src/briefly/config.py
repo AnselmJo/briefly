@@ -380,6 +380,18 @@ class CalendarConfig(BaseModel):
     feeds: list[CalendarFeedConfig] = Field(default_factory=list)
 
 
+class AffirmationConfig(BaseModel):
+    user_list: list[str] = Field(default_factory=list)
+    no_repeat_window: int = 7
+
+    @field_validator("no_repeat_window")
+    @classmethod
+    def validate_window(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("affirmation.no_repeat_window must be at least 1")
+        return v
+
+
 class ScheduleConfig(BaseModel):
     hour: int = 5
     minute: int = 30
@@ -462,11 +474,14 @@ class Config(BaseModel):
         SegmentConfig(id="calendar", enabled=True),
         SegmentConfig(id="news", enabled=True),
         SegmentConfig(id="topics", enabled=True),
+        SegmentConfig(id="affirmation", enabled=True),
+        SegmentConfig(id="funfact", enabled=True),
         SegmentConfig(id="outro", enabled=True),
     ])
     user_name: str = "Anselm"
     weather: WeatherConfig = Field(default_factory=WeatherConfig)
     calendar: CalendarConfig = Field(default_factory=CalendarConfig)
+    affirmation: AffirmationConfig = Field(default_factory=AffirmationConfig)
     target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
 

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -367,3 +367,59 @@ def test_calendar_fetch_failure_fallback_cache(mock_get, tmp_path, monkeypatch):
     assert data is not None
     assert len(data) == 1
     assert data[0]["event"]["SUMMARY"]["value"] == "Cached Old Event"
+
+
+
+def test_affirmation_segment_deterministic_and_window():
+    config = Config()
+    segment = get_segment_impl("affirmation")
+    
+    # 1. Deterministic check: same day produces the same affirmation
+    d1 = date(2026, 7, 5)
+    res1a = segment.script(config, None, None, "en", episode_date=d1)
+    res1b = segment.script(config, None, None, "en", episode_date=d1)
+    assert res1a == res1b
+    
+    # 2. German/English separate built-in lists
+    res_de = segment.script(config, None, None, "de", episode_date=d1)
+    assert res_de != res1a  # Should be in German
+    
+    # 3. No-repeat window check: cycle through 10 consecutive days.
+    # Built-in list has 10 items, so with a cycle permutation there should be zero repeats within any 10-day window!
+    seen = []
+    for offset in range(10):
+        d = d1 + timedelta(days=offset)
+        aff = segment.script(config, None, None, "en", episode_date=d)
+        assert aff not in seen
+        seen.append(aff)
+        
+    # 4. Custom user list
+    config.affirmation.user_list = ["Be kind.", "Stay strong.", "Be curious."]
+    res_custom = segment.script(config, None, None, "en", episode_date=d1)
+    assert res_custom in config.affirmation.user_list
+
+
+def test_funfact_segment_rotation_and_mock():
+    config = Config()
+    segment = get_segment_impl("funfact")
+    
+    # Mock LLM provider
+    mock_llm = MagicMock()
+    mock_llm.generate_segment_text.return_value = "Today's interesting fact: Mocked LLM Fact."
+    
+    d1 = date(2026, 7, 5)
+    res = segment.script(config, None, mock_llm, "en", episode_date=d1)
+    assert res == "Today's interesting fact: Mocked LLM Fact."
+    mock_llm.generate_segment_text.assert_called_once()
+    
+    # 2. Test fallback when LLM fails
+    mock_llm_fail = MagicMock()
+    mock_llm_fail.generate_segment_text.side_effect = Exception("Ollama offline")
+    
+    # Deterministic topic rotation fallback
+    # Since FUNFACT_TOPICS length is 8, different dates produce different topics
+    res_fallback_en = segment.script(config, None, mock_llm_fail, "en", episode_date=d1)
+    assert "Today's interesting fact:" in res_fallback_en
+    
+    res_fallback_de = segment.script(config, None, mock_llm_fail, "de", episode_date=d1)
+    assert "Die heutige interessante Tatsache:" in res_fallback_de

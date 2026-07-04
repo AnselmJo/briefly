@@ -129,6 +129,14 @@ calendar:
   #     include: []
   #     exclude: ["Privat"]
 
+# --- AFFIRMATION ---
+# Konfiguration für das tägliche Affirmations-Segment.
+affirmation:
+  # Optionale eigene Affirmationen (wenn leer, werden die eingebauten verwendet)
+  user_list: []
+  # Mindestanzahl an Tagen, bevor sich eine Affirmation wiederholen darf
+  no_repeat_window: 7
+
 # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
 target_minutes: 10
 

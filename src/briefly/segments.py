@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import random
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -115,6 +116,65 @@ WEATHER_CODES_DE = {
     95: "Gewitter",
     96: "Gewitter mit leichtem Hagel",
     99: "Gewitter mit schwerem Hagel",
+}
+
+AFFIRMATIONS_EN = [
+    "I am capable of achieving my goals today.",
+    "I choose to focus on what I can control.",
+    "My mind is clear, and my focus is sharp.",
+    "I am resilient, strong, and brave.",
+    "Every challenge is an opportunity to grow.",
+    "I trust my intuition and make wise decisions.",
+    "I am proud of who I am becoming.",
+    "I surround myself with positive energy.",
+    "Today is full of possibilities and growth.",
+    "I deserve happiness, success, and peace.",
+]
+
+AFFIRMATIONS_DE = [
+    "Ich bin fähig, meine heutigen Ziele zu erreichen.",
+    "Ich entscheide mich, mich auf das zu konzentrieren, was ich beeinflussen kann.",
+    "Mein Geist ist klar und mein Fokus ist scharf.",
+    "Ich bin widerstandsfähig, stark und mutig.",
+    "Jede Herausforderung ist eine Gelegenheit zu wachsen.",
+    "Ich vertraue meiner Intuition und treffe kluge Entscheidungen.",
+    "Ich bin stolz darauf, wer ich werde.",
+    "Ich umgebe mich mit positiver Energie.",
+    "Der heutige Tag ist voller Möglichkeiten und Wachstum.",
+    "Ich verdiene Glück, Erfolg und Frieden.",
+]
+
+FUNFACT_TOPICS = [
+    "nature",
+    "history",
+    "science",
+    "space",
+    "human body",
+    "geography",
+    "technology",
+    "art",
+]
+
+FALLBACK_FUNFACTS_EN = {
+    "nature": "Today's interesting fact: Honeybees can recognize human faces. They use a method called configural processing, piecing together eyes, ears, and noses just like we do.",
+    "history": "Today's interesting fact: The shortest war in history lasted only 38 minutes. It was fought between the British Empire and the Zanzibar Sultanate in 1896.",
+    "science": "Today's interesting fact: Water can boil and freeze at the same time. This is known as the triple point, where temperature and pressure allow all three states of matter to coexist.",
+    "space": "Today's interesting fact: One day on Venus is longer than one year. Venus takes 243 Earth days to rotate once on its axis, but only 225 Earth days to travel around the Sun.",
+    "human body": "Today's interesting fact: Human bone is about four times stronger than concrete. A block of bone the size of a matchbox can support up to nine tons of weight.",
+    "geography": "Today's interesting fact: Canada has more lakes than the rest of the world combined. Over nine percent of the country's total area is covered by freshwater.",
+    "technology": "Today's interesting fact: The first computer bug was a real moth. In 1947, engineers at Harvard found a moth stuck in a relay of the Harvard Mark II computer.",
+    "art": "Today's interesting fact: Leonardo da Vinci could write with one hand and draw with the other at the same time. This rare ability is known as ambidexterity.",
+}
+
+FALLBACK_FUNFACTS_DE = {
+    "nature": "Die heutige interessante Tatsache: Honigbienen können menschliche Gesichter erkennen. Sie nutzen eine Methode, bei der sie Augen, Ohren und Nasen zusammensetzen, genau wie wir.",
+    "history": "Die heutige interessante Tatsache: Der kürzeste Krieg der Geschichte dauerte nur 38 Minuten. Er wurde 1896 zwischen dem Britischen Empire und dem Sultanat Sansibar geführt.",
+    "science": "Die heutige interessante Tatsache: Wasser kann gleichzeitig kochen und gefrieren. Dies wird als Tripelpunkt bezeichnet, an dem Temperatur und Druck es erlauben, dass alle drei Aggregatzustände koexistieren.",
+    "space": "Die heutige interessante Tatsache: Ein Tag auf der Venus ist länger als ein Venus-Jahr. Die Venus benötigt 243 Erdentage für eine Drehung um die eigene Axhe, aber nur 225 Tage für einen Umlauf um die Sonne.",
+    "human body": "Die heutige interessante Tatsache: Menschliche Knochen sind etwa viermal stabiler als Beton. Ein Knochenblock in der Größe einer Streichholzschachtel kann bis zu neun Tonnen Gewicht tragen.",
+    "geography": "Die heutige interessante Tatsache: Kanada hat mehr Seen als der Rest der Welt zusammen. Über neun Prozent der Gesamtfläche des Landes sind von Süßwasser bedeckt.",
+    "technology": "Die heutige interessante Tatsache: Der erste Computer-Bug war eine echte Motte. Im Jahr 1947 fanden Ingenieure in Harvard eine Motte, die in einem Relais des Mark-Zwei-Computers eingeklemmt war.",
+    "art": "Die heutige interessante Tatsache: Leonardo da Vinci konnte mit einer Hand schreiben und gleichzeitig mit der anderen zeichnen. Diese seltene Fähigkeit wird als Beidhändigkeit bezeichnet.",
 }
 
 
@@ -496,6 +556,29 @@ def _build_calendar_prompt(events: list[dict[str, Any]], language: str) -> str:
     return "\n".join(lines)
 
 
+def _build_funfact_prompt(topic: str, language: str) -> str:
+    if language == "de":
+        return (
+            "Du bist der Sprecher für 'Briefly', ein persönliches tägliches Audio-Briefing.\n"
+            f"Erzähle eine kurze, interessante und überraschende Tatsache zum Thema '{topic}'.\n"
+            "Wichtig:\n"
+            "- Schreibe ausschließlich den fertigen Sprechtext in 2 bis 4 Sätzen.\n"
+            "- Beginne den Text mit 'Die heutige interessante Tatsache:' oder einer ähnlichen Formulierung.\n"
+            "- Schreibe keinen Begleittext, keine Überschrift, und keine Kommentare.\n"
+            "- Formuliere den Text flüssig und ansprechend für die Audio-Ausgabe."
+        )
+    else:
+        return (
+            "You are the speaker for 'Briefly', a personal daily audio briefing.\n"
+            f"Share a short, interesting, and surprising fact about '{topic}'.\n"
+            "Important:\n"
+            "- Write exactly the spoken text in 2 to 4 sentences.\n"
+            "- Begin the text with 'Today's interesting fact:' or a similar phrase.\n"
+            "- Do not write any metadata, headings, or commentary.\n"
+            "- Make it sound natural and engaging for audio playback."
+        )
+
+
 class BaseSegment:
     """Base class for all segment modules."""
 
@@ -643,15 +726,6 @@ class CalendarSegment(BaseSegment):
 
             try:
                 raw_events = parse_ics(content)
-                # Resolve date is needed during script stage, but wait:
-                # We can store target date matching to let script format them.
-                # Since collect doesn't know target date (it runs before script),
-                # wait! How can we filter events by date in script stage if we collect them here?
-                # We can just return all raw events parsed from all feeds,
-                # and let script() filter by episode_date!
-                # Yes, returning the full list of raw events lets script() filter by target_date cleanly!
-                # But wait, we should apply include/exclude keyword filtering per feed here or in script?
-                # Since we keep track of which events come from which feed, we can associate them:
                 for raw_e in raw_events:
                     events.append({
                         "event": raw_e,
@@ -675,14 +749,13 @@ class CalendarSegment(BaseSegment):
             return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
 
         target_date = episode_date or date.today()
-        
-        # Process and filter events
+
         processed_events = []
         for item in data:
             raw_e = item["event"]
             include = item["include"]
             exclude = item["exclude"]
-            
+
             evs = get_events_for_date([raw_e], target_date)
             filtered = filter_events(evs, include, exclude)
             processed_events.extend(filtered)
@@ -690,12 +763,70 @@ class CalendarSegment(BaseSegment):
         if not processed_events:
             return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
 
-        # Generate text
         prompt = _build_calendar_prompt(processed_events, language)
         try:
             return llm_provider.generate_segment_text(prompt)
         except Exception:
             return format_calendar_programmatically(processed_events, language)
+
+
+class AffirmationSegment(BaseSegment):
+    """Affirmation segment."""
+
+    def script(
+        self,
+        config: Config,
+        data: Any,
+        llm_provider: LanguageModelProvider,
+        language: str,
+        episode_date: date | None = None,
+    ) -> str:
+        d = episode_date or date.today()
+
+        user_list = getattr(config.affirmation, "user_list", [])
+        if user_list:
+            affirmations = user_list
+        else:
+            if language == "de":
+                affirmations = AFFIRMATIONS_DE
+            else:
+                affirmations = AFFIRMATIONS_EN
+
+        if not affirmations:
+            return ""
+
+        n = len(affirmations)
+
+        indices = list(range(n))
+        random.Random(42).shuffle(indices)
+
+        idx = indices[d.toordinal() % n]
+        return affirmations[idx]
+
+
+class FunFactSegment(BaseSegment):
+    """Fun fact segment using local LLM."""
+
+    def script(
+        self,
+        config: Config,
+        data: Any,
+        llm_provider: LanguageModelProvider,
+        language: str,
+        episode_date: date | None = None,
+    ) -> str:
+        d = episode_date or date.today()
+
+        topic = FUNFACT_TOPICS[d.toordinal() % len(FUNFACT_TOPICS)]
+        prompt = _build_funfact_prompt(topic, language)
+
+        try:
+            return llm_provider.generate_segment_text(prompt)
+        except Exception:
+            if language == "de":
+                return FALLBACK_FUNFACTS_DE.get(topic, "")
+            else:
+                return FALLBACK_FUNFACTS_EN.get(topic, "")
 
 
 class IntroSegment(BaseSegment):
@@ -822,6 +953,8 @@ _REGISTRY: dict[str, BaseSegment] = {
     "calendar": CalendarSegment("calendar"),
     "news": NewsSegment("news"),
     "topics": TopicsSegment("topics"),
+    "affirmation": AffirmationSegment("affirmation"),
+    "funfact": FunFactSegment("funfact"),
     "outro": OutroSegment("outro"),
 }
 

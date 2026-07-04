@@ -122,6 +122,7 @@ schedule:
         ("user_name: ''", "user_name"),
         ("weather:\n  location: ''", "weather.location"),
         ("calendar:\n  feeds:\n    - url: ''", "calendar.feeds.0.url"),
+        ("affirmation:\n  no_repeat_window: 0", "affirmation.no_repeat_window"),
     ]
 )
 def test_invalid_config_cases(tmp_path, invalid_yaml, expected_key):
