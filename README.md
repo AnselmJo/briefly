@@ -162,15 +162,13 @@ Briefly stellt deine Episoden modular aus folgenden Abschnitten zusammen. Du kan
 
 ## ⚙️ Aktualisierung & Wartung
 
-Wenn eine neue Version von Briefly erscheint, kannst du diese ganz leicht aktualisieren:
+Wenn eine neue Version von Briefly erscheint, kannst du Briefly ganz einfach mit einem einzigen Befehl aktualisieren:
 
-1. Öffne dein Terminal- oder PowerShell-Fenster im Briefly-Ordner.
-2. Führe diese Befehle nacheinander aus:
-   ```bash
-   git pull origin main
-   pip install -e .
-   ```
-3. Starte danach deinen Webserver mit `briefly restart` neu.
+```bash
+briefly update
+```
+
+Dieser Befehl führt im Hintergrund ein `git pull` aus, aktualisiert bei Bedarf die Python-Abhängigkeiten, validiert deine Konfiguration (ohne abzustürzen) und startet den Hintergrunddienst neu, falls dieser lief. Zudem wird eine kurze Übersicht der Änderungen angezeigt.
 
 ---
 
