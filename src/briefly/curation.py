@@ -79,7 +79,7 @@ def load_history() -> list[dict[str, Any]]:
     return []
 
 
-def save_history(history: list[dict[str, Any]]):
+def save_history(history: list[dict[str, Any]]) -> None:
     """Saves covered topics/titles history."""
     history_path = get_user_dir() / "history.json"
     try:
@@ -89,7 +89,7 @@ def save_history(history: list[dict[str, Any]]):
         pass
 
 
-def update_history(selected_items: list[Item]):
+def update_history(selected_items: list[Item]) -> None:
     """Appends currently selected items to the history list (retaining last 7 runs), replacing any entry for today."""
     history = load_history()
     today_str = date.today().isoformat()

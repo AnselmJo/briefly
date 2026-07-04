@@ -51,7 +51,7 @@ def check_feed_health(url: str) -> dict[str, Any]:
         result["error_message"] = f"HTTP Error {e.response.status_code}"
         result["suggested_fix"] = f"Please check the URL. The server returned HTTP {e.response.status_code}."
         return result
-    except (httpx.ConnectError, httpx.RequestError) as e:
+    except (httpx.ConnectError, httpx.RequestError):
         result["status"] = "error"
         result["error_message"] = "Wrong URL or DNS Resolution Failed"
         result["suggested_fix"] = "Please check the URL. The domain could not be resolved or is invalid."
