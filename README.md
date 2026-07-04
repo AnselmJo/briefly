@@ -22,6 +22,14 @@ die Audiodateien mit Kapitelmarken, keine eigene App.
 
 ## Installation
 
+Repo klonen
+Python installieren
+Ollama installieren + Modell
+Piper-Stimmen runterladen
+config.yaml anpassen
+briefly run
+briefly serve
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -29,6 +37,10 @@ pip install -e ".[dev]"
 ```
 
 ### Piper-Stimmen herunterladen
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
 
 Piper-Stimmen (`.onnx` + `.onnx.json`) werden nicht automatisch installiert.
 Für Deutsch und Englisch (Standard-Konfiguration) ins konfigurierte
@@ -78,6 +90,8 @@ briefly script
 briefly audio
 briefly deliver
 ```
+(--to do: zu ergänzen: briefly setup & briefly doctor,briefly update, briefly run (einmalig setup alles und einmalig testen, um Eingaben zu minieren))
+
 
 Web-Oberfläche starten (Eingaben/Einstellungen + Feed-Auslieferung):
 
@@ -113,7 +127,7 @@ Der Web-Server (`com.briefly.web`) läuft danach dauerhaft im Hintergrund und
 ist im Heim-WLAN erreichbar; der nächtliche Lauf (`com.briefly.dailyrun`)
 erzeugt jeden Morgen automatisch eine neue Episode.
 
-## Wiedergabe auf Android (AntennaPod)
+## Wiedergabe auf Android Smartphone (AntennaPod)
 
 1. [AntennaPod](https://antennapod.org/) installieren (F-Droid oder Play Store).
 2. Im selben Heim-WLAN wie der Mac: Feed abonnieren unter
