@@ -426,13 +426,22 @@ class Config(BaseModel):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
     segments: list[SegmentConfig] = Field(default_factory=lambda: [
+        SegmentConfig(id="greeting", enabled=True),
         SegmentConfig(id="intro", enabled=True),
         SegmentConfig(id="news", enabled=True),
         SegmentConfig(id="topics", enabled=True),
         SegmentConfig(id="outro", enabled=True),
     ])
+    user_name: str = "Anselm"
     target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
+
+    @field_validator("user_name")
+    @classmethod
+    def validate_user_name(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("user_name cannot be empty")
+        return v.strip()
 
     @field_validator("segments")
     @classmethod

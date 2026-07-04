@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 
@@ -100,3 +101,70 @@ def test_segment_script_failure_graceful_degradation():
     assert len(script.segments) == 1
     assert script.segments[0].name == "intro"
     assert script.segments[0].text == "Intro script generated successfully"
+
+
+def test_greeting_segment_en():
+    config = Config()
+    config.user_name = "Anselm"
+    segment = get_segment_impl("greeting")
+    
+    # Saturday, July 4th, 2026
+    d = date(2026, 7, 4)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Saturday, July 4th."
+
+    # Wednesday, July 1st, 2026 (1st suffix)
+    d = date(2026, 7, 1)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Wednesday, July 1st."
+
+    # Thursday, July 2nd, 2026 (2nd suffix)
+    d = date(2026, 7, 2)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Thursday, July 2nd."
+
+    # Friday, July 3rd, 2026 (3rd suffix)
+    d = date(2026, 7, 3)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Friday, July 3rd."
+
+    # Year boundary / Leap year (Friday, Jan 1st, 2027)
+    d = date(2027, 1, 1)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Friday, January 1st."
+
+    # Year boundary (Thursday, Dec 31st, 2026)
+    d = date(2026, 12, 31)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Thursday, December 31st."
+
+    # Eleventh (11th suffix)
+    d = date(2026, 7, 11)
+    res = segment.script(config, None, None, "en", episode_date=d)
+    assert res == "Good morning, Anselm. It's Saturday, July 11th."
+
+
+def test_greeting_segment_de():
+    config = Config()
+    config.user_name = "Anselm"
+    segment = get_segment_impl("greeting")
+    
+    # Saturday, July 4th, 2026
+    d = date(2026, 7, 4)
+    res = segment.script(config, None, None, "de", episode_date=d)
+    assert res == "Guten Morgen, Anselm. Es ist Samstag, der 4. Juli."
+
+    # Wednesday, July 1st, 2026
+    d = date(2026, 7, 1)
+    res = segment.script(config, None, None, "de", episode_date=d)
+    assert res == "Guten Morgen, Anselm. Es ist Mittwoch, der 1. Juli."
+
+    # Year boundary (Friday, Jan 1st, 2027)
+    d = date(2027, 1, 1)
+    res = segment.script(config, None, None, "de", episode_date=d)
+    assert res == "Guten Morgen, Anselm. Es ist Freitag, der 1. Januar."
+
+    # Year boundary (Thursday, Dec 31st, 2026)
+    d = date(2026, 12, 31)
+    res = segment.script(config, None, None, "de", episode_date=d)
+    assert res == "Guten Morgen, Anselm. Es ist Donnerstag, der 31. Dezember."

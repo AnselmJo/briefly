@@ -119,6 +119,7 @@ schedule:
         ("tts:\n  provider: invalid", "tts.provider"),
         ("delivery:\n  provider: invalid", "delivery.provider"),
         ("sources:\n  rss:\n    feeds:\n      - topic: news", "sources.rss.feeds.0.url"),
+        ("user_name: ''", "user_name"),
     ]
 )
 def test_invalid_config_cases(tmp_path, invalid_yaml, expected_key):

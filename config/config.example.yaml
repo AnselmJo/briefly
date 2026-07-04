@@ -96,6 +96,8 @@ sources:
 # --- SEGMENTS ---
 # Struktur, Aktivierungsstatus und Reihenfolge der Episodenteile.
 segments:
+  - id: greeting
+    enabled: true
   - id: intro
     enabled: true
   - id: news
@@ -104,6 +106,9 @@ segments:
     enabled: true
   - id: outro
     enabled: true
+
+# Name des Benutzers für die Begrüßung (Standard: Anselm).
+user_name: Anselm
 
 # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
 target_minutes: 10

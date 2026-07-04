@@ -63,6 +63,7 @@ def run_script(
     grouped_items: dict[str, list[Item]],
     config: Config,
     llm_provider: LanguageModelProvider | None = None,
+    episode_date: date | None = None,
 ) -> EpisodeScript:
     """Stufe 3: lässt das LLM das Sprechtext-Skript segmentweise schreiben."""
     from briefly.segments import get_segment_impl
@@ -86,7 +87,7 @@ def run_script(
             
         data = grouped_items.get(segment_id, [])
         try:
-            text = segment_impl.script(config, data, provider, config.tts.language)
+            text = segment_impl.script(config, data, provider, config.tts.language, episode_date=episode_date)
             if text:
                 script_segments.append(ScriptSegment(name=segment_id, text=text))
         except Exception:
@@ -161,7 +162,7 @@ def run_all(config: Config, episode_date: date | None = None) -> EpisodeManifest
     try:
         items = run_collect(config)
         grouped = run_curate(items, config)
-        script = run_script(grouped, config)
+        script = run_script(grouped, config, episode_date=resolved_date)
         manifest = run_audio(script, config, resolved_date)
         run_deliver(manifest, config)
         
