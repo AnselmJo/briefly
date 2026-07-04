@@ -263,6 +263,14 @@ def run_install(interactive: bool = True) -> int:
     if ollama_running:
         models = get_ollama_models()
         model_ok = is_model_installed(model_name, models)
+        if not model_ok:
+            print(f"\nOllama-Modell '{model_name}' fehlt. Lade Modell herunter (ollama pull {model_name})...")
+            try:
+                subprocess.run(["ollama", "pull", model_name], check=True)
+                models = get_ollama_models()
+                model_ok = is_model_installed(model_name, models)
+            except Exception as e:
+                print(f"Fehler beim Herunterladen des Modells via 'ollama pull': {e}")
 
     # 9. Piper-Stimmen prüfen
     voices_dir = config.tts.voices_dir if config else config_path.parent / "data" / "voices"

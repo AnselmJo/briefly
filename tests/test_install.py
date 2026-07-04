@@ -350,3 +350,44 @@ def test_run_install_voices_missing(tmp_path, capsys):
         assert ret == 1
         captured = capsys.readouterr()
         assert "Piper-Stimme" in captured.out
+
+
+def test_run_install_ollama_model_missing_pulls_automatically(tmp_path):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["different-model:latest"]):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        run_install(interactive=False)
+        
+        # Verify subprocess.run was called to pull the missing model
+        mock_run.assert_any_call(["ollama", "pull", "qwen3:8b"], check=True)
+
+
+def test_run_install_ollama_model_already_present_short_circuits(tmp_path):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        run_install(interactive=False)
+        
+        # Verify subprocess.run was NOT called to pull qwen3:8b since it is already present
+        for call in mock_run.call_args_list:
+            assert "pull" not in call[0][0]

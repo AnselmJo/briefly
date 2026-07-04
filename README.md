@@ -67,12 +67,8 @@ Du brauchst ein Paket-Verwaltungsprogramm namens **Homebrew**, um Python, FFmpeg
    brew install python ffmpeg ollama git
    ```
 
-#### Schritt 2: Ollama starten & KI-Modell herunterladen
-1. Öffne **Ollama** über deine macOS Spotlight-Suche (`Cmd + Leertaste` -> Ollama). Ein kleines Lama-Symbol erscheint oben rechts in deiner Menüleiste.
-2. Lade das KI-Sprachmodell herunter:
-   ```bash
-   ollama pull qwen2.5:7b
-   ```
+#### Schritt 2: Ollama starten
+1. Öffne **Ollama** über deine macOS Spotlight-Suche (`Cmd + Leertaste` -> Ollama). Ein kleines Lama-Symbol erscheint oben rechts in deiner Menüleiste. Stelle sicher, dass der Dienst aktiv ist.
 
 #### Schritt 3: Briefly herunterladen & einrichten
 1. Kopiere das Briefly-Repository auf deinen Mac:
@@ -105,12 +101,8 @@ Unter Windows nutzen wir den Paketmanager `winget`.
    ```
 3. Schließe das PowerShell-Fenster und öffne ein neues (ohne Administratorrechte).
 
-#### Schritt 2: Ollama starten & KI-Modell herunterladen
-1. Starte **Ollama** über dein Windows-Startmenü.
-2. Lade das Standard-Sprachmodell herunter:
-   ```powershell
-   ollama pull qwen2.5:7b
-   ```
+#### Schritt 2: Ollama starten
+1. Starte **Ollama** über dein Windows-Startmenü. Vergewissere dich, dass Ollama im Hintergrund aktiv ist (Lama-Symbol in der Taskleiste).
 
 #### Schritt 3: Briefly herunterladen & einrichten
 1. Lade Briefly auf deinen PC herunter:
@@ -200,7 +192,7 @@ Deine virtuelle Python-Umgebung ist nicht aktiv. Führe im Briefly-Ordner aus:
 
 <details>
 <summary><b>2. Die Audio-Generierung bleibt bei 0% hängen oder bricht ab</b></summary>
-Stelle sicher, dass **Ollama** im Hintergrund gestartet ist und das Sprachmodell geladen wurde. Teste es, indem du `ollama run qwen2.5:7b` im Terminal ausführst und prüfst, ob du eine Antwort erhältst.
+Stelle sicher, dass **Ollama** im Hintergrund gestartet ist und das Sprachmodell geladen wurde. Teste es, indem du `ollama run qwen3:8b` im Terminal ausführst und prüfst, ob du eine Antwort erhältst.
 </details>
 
 <details>
