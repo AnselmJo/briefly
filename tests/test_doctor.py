@@ -1,9 +1,7 @@
 import sys
-import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from briefly.doctor import (
     CheckResult,
@@ -248,19 +246,24 @@ def test_check_feed_generation_success():
 
 
 def test_check_launchd_services():
-    # Only test macOS specific logic if platform is macOS, else check skip
-    if sys.platform != "darwin":
+    # Test macOS/Windows cross-platform logic using mocks
+    if sys.platform == "darwin":
+        with patch("briefly.scheduler.check_daily_run_status", return_value=(True, "OK")):
+            with patch("briefly.scheduler.check_web_server_status", return_value=(True, "OK")):
+                res = check_launchd_services()
+                assert res.status is True
+                assert res.name == "launchd-Dienste"
+    elif sys.platform in ("win32", "cygwin"):
+        with patch("briefly.scheduler.check_daily_run_status", return_value=(True, "OK")):
+            with patch("briefly.scheduler.check_web_server_status", return_value=(True, "OK")):
+                res = check_launchd_services()
+                assert res.status is True
+                assert res.name == "Windows Scheduled Tasks"
+    else:
         res = check_launchd_services()
         assert res.status is True
         assert res.is_warning is True
-    else:
-        # Mock plist file existence
-        with patch("pathlib.Path.exists", return_value=True):
-            with patch("subprocess.run") as mock_run:
-                # Mock running services
-                mock_run.return_value = MagicMock(returncode=0)
-                res = check_launchd_services()
-                assert res.status is True
+
 
 
 @patch("briefly.doctor.check_python", return_value=CheckResult("Python", True, "OK"))

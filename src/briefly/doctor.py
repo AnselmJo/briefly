@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
-import shutil
 import socket
-import json
-import subprocess
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -304,7 +301,7 @@ def check_installed_model(config: Any | None) -> CheckResult:
 def check_piper() -> CheckResult:
     """Prüft, ob das piper-tts Paket importiert werden kann."""
     try:
-        import piper
+        import piper  # noqa: F401
         return CheckResult(
             name="Piper-Synthesizer",
             status=True,
@@ -374,7 +371,7 @@ def check_web_server(config: Any | None) -> CheckResult:
         warnings.append(f"Host ist '{config.web.host}' statt '0.0.0.0' (nur lokal erreichbar)")
         
     if "localhost" in config.delivery.base_url or "127.0.0.1" in config.delivery.base_url:
-        warnings.append(f"delivery.base_url zeigt auf localhost (Podcast-Wiedergabe am Handy scheitert)")
+        warnings.append("delivery.base_url zeigt auf localhost (Podcast-Wiedergabe am Handy scheitert)")
         
     if warnings:
         return CheckResult(
@@ -417,66 +414,61 @@ def check_feed_generation() -> CheckResult:
 
 
 def check_launchd_services() -> CheckResult:
-    """Prüft, ob die launchd-Dienste geladen sind (nur macOS)."""
-    if sys.platform != "darwin":
+    """Prüft, ob die launchd-Dienste (macOS) oder Scheduled Tasks (Windows) geladen sind."""
+    from briefly import scheduler
+    
+    if sys.platform == "darwin":
+        plist_dir = Path.home() / "Library" / "LaunchAgents"
+        ok_daily, msg_daily = scheduler.check_daily_run_status()
+        ok_web, msg_web = scheduler.check_web_server_status()
+        
+        if not ok_daily or not ok_web:
+            unloaded = []
+            if not ok_daily:
+                unloaded.append(scheduler.MACOS_DAILY_LABEL)
+            if not ok_web:
+                unloaded.append(scheduler.MACOS_WEB_LABEL)
+            fix_lines = [f"launchctl load -w {plist_dir}/{srv}.plist" for srv in unloaded]
+            return CheckResult(
+                name="launchd-Dienste",
+                status=False,
+                details=f"Dienste nicht geladen: {', '.join(unloaded)}",
+                fix="Lade die Dienste manuell:\n  " + "\n  ".join(fix_lines),
+            )
+        return CheckResult(
+            name="launchd-Dienste",
+            status=True,
+            details="Dienste geladen und aktiv",
+        )
+    elif sys.platform == "win32" or sys.platform == "cygwin":
+        ok_daily, msg_daily = scheduler.check_daily_run_status()
+        ok_web, msg_web = scheduler.check_web_server_status()
+        
+        if not ok_daily or not ok_web:
+            unregistered = []
+            if not ok_daily:
+                unregistered.append(scheduler.WIN_DAILY_LABEL)
+            if not ok_web:
+                unregistered.append(scheduler.WIN_WEB_LABEL)
+            return CheckResult(
+                name="Windows Scheduled Tasks",
+                status=False,
+                details=f"Tasks nicht registriert: {', '.join(unregistered)}",
+                fix="Führe 'briefly install' aus, um die Scheduled Tasks unter Windows einzurichten.",
+            )
+        return CheckResult(
+            name="Windows Scheduled Tasks",
+            status=True,
+            details="Tasks registriert und aktiv",
+        )
+    else:
         return CheckResult(
             name="launchd-Dienste",
             status=True,
             is_warning=True,
-            details="Übersprungen (Nicht auf macOS)",
+            details="Übersprungen (Nicht auf macOS/Windows)",
         )
-        
-    plist_dir = Path.home() / "Library" / "LaunchAgents"
-    web_plist = plist_dir / "com.briefly.web.plist"
-    daily_plist = plist_dir / "com.briefly.dailyrun.plist"
-    
-    missing_files = []
-    if not web_plist.exists():
-        missing_files.append("com.briefly.web.plist")
-    if not daily_plist.exists():
-        missing_files.append("com.briefly.dailyrun.plist")
-        
-    if missing_files:
-        return CheckResult(
-            name="launchd-Dienste",
-            status=False,
-            details=f"Dateien fehlen in LaunchAgents: {', '.join(missing_files)}",
-            fix="Führe 'briefly install' aus, um die Dienste zu generieren und zu laden.",
-        )
-        
-    # Prüfen ob sie geladen sind
-    web_loaded = False
-    daily_loaded = False
-    
-    try:
-        res_web = subprocess.run(["launchctl", "list", "com.briefly.web"], capture_output=True, text=True)
-        web_loaded = res_web.returncode == 0
-        
-        res_daily = subprocess.run(["launchctl", "list", "com.briefly.dailyrun"], capture_output=True, text=True)
-        daily_loaded = res_daily.returncode == 0
-    except Exception:
-        pass
-        
-    unloaded = []
-    if not web_loaded:
-        unloaded.append("com.briefly.web")
-    if not daily_loaded:
-        unloaded.append("com.briefly.dailyrun")
-        
-    if unloaded:
-        fix_lines = [f"launchctl load -w {plist_dir}/{srv}.plist" for srv in unloaded]
-        return CheckResult(
-            name="launchd-Dienste",
-            status=False,
-            details=f"Dienste nicht geladen: {', '.join(unloaded)}",
-            fix="Lade die Dienste manuell:\n  " + "\n  ".join(fix_lines),
-        )
-        
-    return CheckResult(
-        name="launchd-Dienste",
-        status=True,
-        details="Dienste geladen und aktiv",
-    )
+
 
 
 def run_doctor() -> int:

@@ -3,7 +3,8 @@
 Ermöglicht eine einfache Einrichtung auch für Python-Neulinge durch:
 - Überprüfung von Abhängigkeiten, Ollama, Modellen und Piper-Stimmen.
 - Automatisches Erstellen von Konfigurationsdatei und Verzeichnissen.
-- Generieren und optionales Installieren von launchd-Diensten auf macOS.
+- Generieren und optionales Installieren von launchd-Diensten auf macOS
+  oder Scheduled Tasks auf Windows.
 - Überprüfung der Webserver-Konfiguration.
 - Ausgeben eines detaillierten Diagnose- und Erfolgsberichts.
 """
@@ -13,7 +14,6 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.util
 import json
-import os
 import shutil
 import socket
 import subprocess
@@ -22,6 +22,8 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from typing import Any
+
+from briefly import scheduler
 
 # Globale Liste der benötigten Python-Pakete (Verteilungsschlüssel aus pyproject.toml)
 REQUIRED_PACKAGES = {
@@ -54,7 +56,6 @@ def get_local_ip() -> str:
     except Exception:
         ip = "127.0.0.1"
     return ip
-
 
 
 def check_python_dependencies() -> list[str]:
@@ -128,27 +129,34 @@ def verify_write_permission(path: Path) -> bool:
         return False
 
 
-def install_launchd_plist(
-    plist_name: str, src_path: Path, dest_dir: Path, interactive: bool = True
-) -> bool:
-    """Kopiert und lädt eine launchd Plist-Datei auf macOS."""
-    dest_path = dest_dir / plist_name
+def check_disk_space(project_root: Path, min_gb: float = 5.0) -> tuple[bool, str]:
+    """Prüft, ob genügend Speicherplatz auf dem Datenträger vorhanden ist.
+
+    Returns:
+        (success, status_info)
+    """
     try:
-        # Eventuell vorhandenen Dienst vorher entladen
-        subprocess.run(["launchctl", "unload", str(dest_path)], capture_output=True, check=False)
-        
-        # Kopieren
-        shutil.copy(src_path, dest_path)
-        
-        # Berechtigungen sicherstellen (standardmäßig 644 für LaunchAgents)
-        dest_path.chmod(0o644)
-        
-        # Dienst laden
-        result = subprocess.run(["launchctl", "load", "-w", str(dest_path)], capture_output=True, check=True)
-        return result.returncode == 0
+        usage = shutil.disk_usage(project_root)
+        free_gb = usage.free / (1024**3)
+        return free_gb >= min_gb, f"{free_gb:.1f} GB frei"
     except Exception as e:
-        print(f"Fehler bei launchd-Installation für {plist_name}: {e}", file=sys.stderr)
-        return False
+        return False, f"Fehler: {e}"
+
+
+def check_port_availability(host: str, port: int) -> tuple[bool, str]:
+    """Prüft, ob ein Port frei ist.
+
+    Returns:
+        (success, status_info)
+    """
+    try:
+        bind_host = "127.0.0.1" if host == "0.0.0.0" else host
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind((bind_host, port))
+        return True, "Frei"
+    except Exception:
+        return False, f"Belegt (Port {port})"
 
 
 def _get_project_root() -> Path:
@@ -163,8 +171,6 @@ def run_install(interactive: bool = True) -> int:
     print("======================================================================")
     
     project_root = _get_project_root()
-    has_errors = False
-
     
     # 1. Python-Version prüfen
     python_ok = sys.version_info >= (3, 12)
@@ -182,26 +188,31 @@ def run_install(interactive: bool = True) -> int:
         if example_config_path.exists():
             try:
                 content = example_config_path.read_text(encoding="utf-8")
-                # Lokale IP-Adresse direkt in die Konfiguration eintragen
                 content = content.replace("http://<mac-lan-ip>:8787", f"http://{local_ip}:8787")
                 config_path.write_text(content, encoding="utf-8")
                 config_created = True
             except Exception as e:
                 print(f"Fehler: Konfigurationsdatei konnte nicht erstellt werden: {e}", file=sys.stderr)
-                has_errors = True
         else:
             print("Fehler: 'config/config.example.yaml' nicht gefunden.", file=sys.stderr)
-            has_errors = True
 
-    # Versuchen, die Konfiguration einzulesen (nur wenn keine schwerwiegenden Fehler vorliegen)
+    # Versuchen, die Konfiguration einzulesen
     config: Any = None
+    config_load_error = None
     if config_path.exists() and not missing_deps:
         try:
             from briefly.config import load_config
             config = load_config(config_path)
         except Exception as e:
-            print(f"Fehler: Konfiguration konnte nicht geladen werden: {e}", file=sys.stderr)
-            has_errors = True
+            config_load_error = e
+
+    # Wenn die Konfiguration nicht geladen werden konnte, fahre nicht mit den Verzeichnis-Checks fort
+    # sondern breche mit einer verständlichen Fehlermeldung ab.
+    if config_load_error:
+        print("\n❌ Die Konfiguration konnte nicht geladen werden.", file=sys.stderr)
+        print("Details:", config_load_error, file=sys.stderr)
+        print("Behebung: Bitte überprüfe die YAML-Syntax in deiner 'config.yaml'.", file=sys.stderr)
+        return 1
 
     # 4. Verzeichnisse anlegen und Schreibrechte prüfen
     write_perms = {}
@@ -215,18 +226,31 @@ def run_install(interactive: bool = True) -> int:
         }
         for key, path in dirs_to_check.items():
             write_perms[key] = verify_write_permission(path)
-            if not write_perms[key]:
-                has_errors = True
     else:
         # Fallback-Verzeichnisse erstellen/prüfen
         for key, rel_path in [("root", ""), ("inbox", "data/inbox"), ("voices", "data/voices"), ("output", "output"), ("episodes", "output/episodes")]:
             path = project_root / rel_path
             write_perms[key] = verify_write_permission(path)
 
-    # 5. ffmpeg prüfen
+    # 5. Speicherplatz prüfen (mindestens 5 GB erforderlich)
+    disk_space_ok, disk_space_info = check_disk_space(project_root, 5.0)
+
+    # 6. ffmpeg prüfen und verifizieren
     ffmpeg_bin = shutil.which("ffmpeg")
-    
-    # 6. Ollama & Modell prüfen
+    ffmpeg_ok = False
+    if ffmpeg_bin:
+        try:
+            res = subprocess.run([ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=2)
+            ffmpeg_ok = res.returncode == 0
+        except Exception:
+            ffmpeg_ok = False
+
+    # 7. Port-Verfügbarkeit prüfen
+    web_host = config.web.host if config else "0.0.0.0"
+    web_port = config.web.port if config else 8787
+    port_ok, port_info = check_port_availability(web_host, web_port)
+
+    # 8. Ollama & Modell prüfen
     ollama_installed = check_ollama_cli() is not None
     ollama_running = is_ollama_running()
     model_name = config.llm.model if config else "qwen3:8b"
@@ -236,7 +260,7 @@ def run_install(interactive: bool = True) -> int:
         models = get_ollama_models()
         model_ok = is_model_installed(model_name, models)
 
-    # 7. Piper-Stimmen prüfen
+    # 9. Piper-Stimmen prüfen
     voices_dir = project_root / (config.tts.voices_dir if config else Path("data/voices"))
     voice_de = config.tts.voice_de if config else "de_DE-thorsten-medium"
     voice_en = config.tts.voice_en if config else "en_US-lessac-medium"
@@ -244,68 +268,36 @@ def run_install(interactive: bool = True) -> int:
     voice_de_ok = check_piper_voice(voice_de, voices_dir)
     voice_en_ok = check_piper_voice(voice_en, voices_dir)
 
-    # 8. launchd Generierung
-    launchd_generated = False
-    dailyrun_plist = project_root / "output" / "com.briefly.dailyrun.plist"
-    web_plist = project_root / "output" / "com.briefly.web.plist"
+    # 10. Scheduler Registrierung
+    scheduler_installed = False
+    scheduler_prompted = False
     
-    if write_perms.get("output"):
-        # Templates einlesen
-        tpl_dir = project_root / "scripts" / "launchd"
-        tpl_daily = tpl_dir / "com.briefly.dailyrun.plist"
-        tpl_web = tpl_dir / "com.briefly.web.plist"
-        
-        if tpl_daily.exists() and tpl_web.exists():
-            try:
-                python_bin = sys.executable
-                proj_dir_str = str(project_root.resolve())
-                
-                # Dailyrun bearbeiten
-                content_daily = tpl_daily.read_text(encoding="utf-8")
-                content_daily = content_daily.replace("__PYTHON_BIN__", python_bin)
-                content_daily = content_daily.replace("__PROJECT_DIR__", proj_dir_str)
-                hour = config.schedule.hour if config else 5
-                minute = config.schedule.minute if config else 30
-                content_daily = content_daily.replace("<integer>5</integer>", f"<integer>{hour}</integer>")
-                content_daily = content_daily.replace("<integer>30</integer>", f"<integer>{minute}</integer>")
-                dailyrun_plist.write_text(content_daily, encoding="utf-8")
-                
-                # Web-Server bearbeiten
-                content_web = tpl_web.read_text(encoding="utf-8")
-                content_web = content_web.replace("__PYTHON_BIN__", python_bin)
-                content_web = content_web.replace("__PROJECT_DIR__", proj_dir_str)
-                web_plist.write_text(content_web, encoding="utf-8")
-                
-                launchd_generated = True
-            except Exception as e:
-                print(f"Fehler: launchd-Konfigurationsdateien konnten nicht generiert werden: {e}", file=sys.stderr)
-
-    # 9. launchd Installation (falls auf macOS und vom Benutzer bestätigt)
-    is_macos = sys.platform == "darwin"
-    launchd_installed = False
+    hour = config.schedule.hour if config else 5
+    minute = config.schedule.minute if config else 30
     
-    if is_macos and launchd_generated:
+    if scheduler.is_macos() or scheduler.is_windows():
         confirm = False
         if interactive:
-            print("\n--- launchd-Dienste konfigurieren ---")
-            print("Möchtest du launchd-Dienste auf deinem Mac installieren, um Briefly")
-            print("täglich um 05:30 Uhr auszuführen und den Webserver im Hintergrund zu starten? (y/N): ", end="")
+            platform_name = "launchd-Dienste" if scheduler.is_macos() else "Scheduled Tasks"
+            schedule_msg = "täglich um 05:30 Uhr auszuführen" if not config else f"täglich um {hour:02d}:{minute:02d} Uhr auszuführen"
+            print(f"\n--- {platform_name} konfigurieren ---")
+            print("Möchtest du die Hintergrunddienste installieren, um Briefly")
+            print(f"{schedule_msg} und den Webserver im Hintergrund zu starten? (y/N): ", end="")
             sys.stdout.flush()
             try:
                 response = sys.stdin.readline().strip().lower()
                 confirm = response in ("y", "yes")
             except Exception:
                 confirm = False
+            scheduler_prompted = True
         
         if confirm:
-            launchagents_dir = Path.home() / "Library" / "LaunchAgents"
-            launchagents_dir.mkdir(parents=True, exist_ok=True)
-            
-            web_ok = install_launchd_plist("com.briefly.web.plist", web_plist, launchagents_dir, interactive)
-            daily_ok = install_launchd_plist("com.briefly.dailyrun.plist", dailyrun_plist, launchagents_dir, interactive)
-            launchd_installed = web_ok and daily_ok
+            python_bin = Path(sys.executable)
+            web_ok = scheduler.register_web_server(python_bin, project_root, web_host, web_port, interactive)
+            daily_ok = scheduler.register_daily_run(python_bin, project_root, hour, minute, interactive)
+            scheduler_installed = web_ok and daily_ok
 
-    # 10. Webserver-Konfiguration prüfen
+    # 11. Webserver-Konfiguration prüfen (Warnungen)
     web_config_ok = True
     web_warnings = []
     if config:
@@ -319,7 +311,7 @@ def run_install(interactive: bool = True) -> int:
             web_config_ok = False
             web_warnings.append(
                 f"delivery.base_url verwendet '{config.delivery.base_url}'. "
-                "Für den Feed-Zugriff per Smartphone im Heim-WLAN sollte hier die lokale IP deines Macs eingetragen sein."
+                "Für den Feed-Zugriff per Smartphone im Heim-WLAN sollte hier die lokale IP deines Macs/Rechners eingetragen sein."
             )
     else:
         web_config_ok = False
@@ -345,7 +337,9 @@ def run_install(interactive: bool = True) -> int:
     
     dirs_ok = all(write_perms.values())
     print_status("Verzeichnisse & Schreibrechte", dirs_ok, info="Berechtigungen OK" if dirs_ok else "Schreibrechte fehlen")
-    print_status("ffmpeg Audio-Konverter", ffmpeg_bin is not None, info="Gefunden" if ffmpeg_bin else "Fehlt")
+    print_status("Speicherplatz (> 5 GB)", disk_space_ok, info=disk_space_info)
+    print_status("ffmpeg Audio-Konverter", ffmpeg_ok, info="Gefunden & funktionstüchtig" if ffmpeg_ok else "Fehlgeschlagen/Fehlt" if ffmpeg_bin else "Fehlt")
+    print_status("Port-Verfügbarkeit", port_ok, info=port_info)
     print_status("Ollama Installation", ollama_installed, info="Installiert" if ollama_installed else "Fehlt")
     print_status("Ollama Dienst aktiv", ollama_running, info="Aktiv" if ollama_running else "Nicht aktiv")
     print_status(f"Ollama Modell '{model_name}'", model_ok, info="Vorhanden" if model_ok else "Fehlt")
@@ -353,21 +347,24 @@ def run_install(interactive: bool = True) -> int:
     print_status("Piper Stimme (EN)", voice_en_ok, info="Geladen" if voice_en_ok else "Fehlt")
     print_status("Webserver-Konfiguration", web_config_ok, warning=not web_config_ok, info="Optimal" if web_config_ok else "Warnung")
     
-    if is_macos:
-        print_status("launchd-Dienste", launchd_installed, warning=not launchd_installed and launchd_generated, info="Aktiv" if launchd_installed else "Generiert" if launchd_generated else "Fehlgeschlagen")
+    if scheduler.is_macos():
+        print_status("launchd-Dienste", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
+    elif scheduler.is_windows():
+        print_status("Windows Scheduled Tasks", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
     else:
-        print_status("launchd-Dienste", False, warning=True, info="Nur auf macOS verfügbar")
+        print_status("Hintergrund-Dienste", False, warning=True, info="Nur auf macOS/Windows verfügbar")
         
     print("=" * 70)
 
     # Behebungsanweisungen ausgeben falls Fehler vorhanden sind
-    fatal_error = not python_ok or bool(missing_deps) or not dirs_ok
+    fatal_error = not python_ok or bool(missing_deps) or not dirs_ok or not disk_space_ok or not ffmpeg_ok or not port_ok or not ollama_installed or not ollama_running or not model_ok or not voice_de_ok or not voice_en_ok
     
-    if fatal_error or not ffmpeg_bin or not ollama_installed or not ollama_running or not model_ok or not voice_de_ok or not voice_en_ok or not web_config_ok:
+    if fatal_error or not web_config_ok:
         print("\n🛠️  FEHLERBEHEBUNG & EMPFEHLUNGEN:")
         
         if not python_ok:
-            print("- Python: Bitte installiere Python 3.12 oder neuer auf deinem Mac.")
+            print("- Python-Version veraltet: Briefly benötigt mindestens Python 3.12.")
+            print("  Behebung: Bitte installiere Python 3.12 oder neuer auf deinem System.")
         if missing_deps:
             print(f"- Python-Pakete: Folgende Abhängigkeiten fehlen: {', '.join(missing_deps)}")
             print("  Behebung: Führe im Projektverzeichnis aus: pip install -e .")
@@ -377,16 +374,46 @@ def run_install(interactive: bool = True) -> int:
                 if not perm:
                     path_str = str((project_root / (config.sources.inbox.path if config and name == "inbox" else config.tts.voices_dir if config and name == "voices" else config.delivery.output_dir if config and name == "output" else config.delivery.output_dir / "episodes" if config and name == "episodes" else Path())).resolve())
                     print(f"  * {name} ({path_str})")
-            print("  Behebung: Nutze 'chmod u+w <pfad>' oder 'chown' im Terminal.")
-        if not ffmpeg_bin:
-            print("- ffmpeg: Der Audio-Konverter wurde nicht gefunden.")
-            print("  Behebung: Installiere ffmpeg auf deinem Mac mit: brew install ffmpeg")
+            if scheduler.is_windows():
+                print("  Behebung: Führe in cmd/Powershell für die betroffenen Pfade aus:")
+                print("    icacls \"<pfad>\" /grant %username%:F")
+            else:
+                print("  Behebung: Nutze 'chmod u+w <pfad>' oder 'chown' im Terminal.")
+        if not disk_space_ok:
+            print(f"- Speicherplatz: {disk_space_info} vorhanden.")
+            print("  Behebung: Lösche nicht benötigte Dateien oder deinstalliere ungenutzte Ollama-Modelle (z.B. mit 'ollama rm <modell>'), um mindestens 5 GB freien Speicherplatz freizugeben.")
+        if not ffmpeg_ok:
+            print("- ffmpeg: Der Audio-Konverter wurde nicht gefunden oder funktioniert nicht.")
+            if scheduler.is_windows():
+                print("  Behebung: Installiere ffmpeg unter Windows mit: winget install Gyan.FFmpeg")
+            else:
+                print("  Behebung: Installiere ffmpeg auf deinem Mac mit: brew install ffmpeg")
+        if not port_ok:
+            print(f"- Port belegt: Port {web_port} wird bereits von einem anderen Prozess verwendet.")
+            if scheduler.is_windows():
+                print("  Behebung: Beende den blockierenden Prozess in cmd/Powershell mit:")
+                print(f"    netstat -ano | findstr :{web_port}")
+                print("    taskkill /F /PID <PID>")
+            else:
+                print("  Behebung: Beende den blockierenden Prozess mit:")
+                print(f"    lsof -i :{web_port}")
+                print("    kill -9 <PID>")
+            print("  Oder passe den Port in config.yaml an (z.B. port: 8788).")
         if not ollama_installed:
             print("- Ollama: Die Anwendung 'Ollama' ist nicht auf deinem System installiert.")
-            print("  Behebung: Lade Ollama von https://ollama.com herunter und installiere es.")
+            if scheduler.is_windows():
+                print("  Behebung: Installiere Ollama via winget mit: winget install Ollama.Ollama")
+            else:
+                print("  Behebung: Installiere Ollama via Homebrew mit: brew install --cask ollama")
+            print("  Alternativ lade es direkt von https://ollama.com herunter.")
         elif not ollama_running:
             print("- Ollama: Der Ollama-Hintergrunddienst läuft nicht.")
-            print("  Behebung: Starte die App 'Ollama' über deine Programme.")
+            if scheduler.is_windows():
+                print("  Behebung: Starte die App 'Ollama' über das Startmenü oder in der Powershell mit:")
+                print("    start \"\" \"%LocalAppData%\\Programs\\Ollama\\Ollama.exe\"")
+            else:
+                print("  Behebung: Starte die App 'Ollama' über deine Programme oder im Terminal mit:")
+                print("    open /Applications/Ollama.app")
         elif not model_ok:
             print(f"- Ollama Modell: Das Modell '{model_name}' ist nicht in Ollama geladen.")
             print(f"  Behebung: Führe aus: ollama pull {model_name}")
@@ -399,7 +426,7 @@ def run_install(interactive: bool = True) -> int:
         if not web_config_ok and web_warnings:
             for warn in web_warnings:
                 print(f"- Webserver: {warn}")
-            print(f"  Behebung: Passe die Werte in der Datei config.yaml an. Empfohlene IP: http://{local_ip}:8787")
+            print(f"  Behebung: Passe die Werte in der Datei config.yaml an. Empfohlene IP: http://{local_ip}:{web_port}")
             
         print("=" * 70)
 
@@ -415,26 +442,22 @@ def run_install(interactive: bool = True) -> int:
     print("\nNÄCHSTE SCHRITTE:")
     
     # 1. Ersten Lauf erklären
-    if not model_ok or not voice_de_ok or not voice_en_ok:
-        print("1. [Erforderlich] Lade die fehlenden Modelle und Stimmen herunter (siehe Fehlerbehebung oben).")
-        print("2. Führe die Erstellung deines ersten Audio-Briefings aus:")
-        print("   briefly run")
-    else:
-        print("1. Führe die Erstellung deines ersten Audio-Briefings aus:")
-        print("   briefly run")
+    print("1. Starte den ersten Pipeline-Lauf manuell, um dein erstes Audio-Briefing zu erzeugen:")
+    print("   briefly run")
         
     # 2. Webserver starten erklären
-    if launchd_installed:
-        print("2. Der Webserver läuft bereits im Hintergrund über launchd.")
-        print(f"   Du erreichst die Web-Oberfläche unter: http://{local_ip}:8787")
+    if scheduler_installed:
+        service_mgr = "launchd" if scheduler.is_macos() else "Task Scheduler"
+        print(f"2. Der Webserver läuft bereits im Hintergrund (über {service_mgr}).")
+        print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
     else:
-        print("2. Starte die Web-Oberfläche manuell im Terminal:")
-        print(f"   uvicorn briefly.web.app:app --host 0.0.0.0 --port 8787")
-        print(f"   Du erreichst sie im Browser unter: http://{local_ip}:8787")
+        print("2. Starte den Webserver manuell im Terminal:")
+        print(f"   uvicorn briefly.web.app:app --host 0.0.0.0 --port {web_port}")
+        print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
         
     # 3. RSS-Feed abonnieren erklären
-    print(f"3. Abonniere den Podcast-Feed in deiner Podcast-App (z. B. AntennaPod) über:")
-    print(f"   http://{local_ip}:8787/feed.xml")
+    print("3. Abonniere den Podcast-Feed in deiner Podcast-App (z. B. AntennaPod) über:")
+    print(f"   http://{local_ip}:{web_port}/feed.xml")
     
     print("\n(Du kannst deine RSS-Feeds, Themen und Einstellungen jederzeit über die")
     print("Web-Oberfläche oder direkt in der Datei 'config.yaml' anpassen.)")

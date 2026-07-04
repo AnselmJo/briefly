@@ -1,9 +1,6 @@
-import json
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from briefly.install import (
     check_piper_voice,
@@ -13,6 +10,8 @@ from briefly.install import (
     is_ollama_running,
     run_install,
     verify_write_permission,
+    check_disk_space,
+    check_port_availability,
 )
 
 
@@ -98,63 +97,249 @@ def test_verify_write_permission(tmp_path):
         assert verify_write_permission(read_only_dir) is False
 
 
+def test_check_disk_space():
+    with patch("shutil.disk_usage", return_value=MagicMock(free=10 * 1024**3)):
+        success, info = check_disk_space(Path("."), 5.0)
+        assert success is True
+        assert "10.0 GB" in info
+
+    with patch("shutil.disk_usage", return_value=MagicMock(free=2 * 1024**3)):
+        success, info = check_disk_space(Path("."), 5.0)
+        assert success is False
+        assert "2.0 GB" in info
+
+
+def test_check_port_availability():
+    # Free port
+    with patch("socket.socket"):
+        success, info = check_port_availability("0.0.0.0", 8787)
+        assert success is True
+
+    # Busy port
+    with patch("socket.socket", side_effect=Exception("Port in use")):
+        success, info = check_port_availability("0.0.0.0", 8787)
+        assert success is False
+        assert "Belegt" in info
+
+
+def _setup_mock_project_root(project_root):
+    project_root.mkdir(parents=True, exist_ok=True)
+    config_dir = project_root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.example.yaml").write_text(
+        "delivery:\n  base_url: \"http://<mac-lan-ip>:8787\"\n  output_dir: output\n"
+        "llm:\n  model: qwen3:8b\n"
+        "tts:\n  voice_de: de_voice\n  voice_en: en_voice\n  voices_dir: data/voices\n"
+        "sources:\n  inbox:\n    path: data/inbox\n"
+        "web:\n  host: 0.0.0.0\n  port: 8787\n"
+        "schedule:\n  hour: 5\n  minute: 30\n",
+        encoding="utf-8"
+    )
+    
+    scripts_dir = project_root / "scripts" / "launchd"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    (scripts_dir / "com.briefly.dailyrun.plist").write_text("__PYTHON_BIN__\n__PROJECT_DIR__")
+    (scripts_dir / "com.briefly.web.plist").write_text("__PYTHON_BIN__\n__PROJECT_DIR__")
+    
+    voices_dir = project_root / "data" / "voices"
+    voices_dir.mkdir(parents=True, exist_ok=True)
+    (voices_dir / "de_voice.onnx").write_text("onnx")
+    (voices_dir / "de_voice.onnx.json").write_text("json")
+    (voices_dir / "en_voice.onnx").write_text("onnx")
+    (voices_dir / "en_voice.onnx.json").write_text("json")
+
+
 @patch("briefly.install.get_local_ip", return_value="192.168.1.100")
 @patch("briefly.install.check_python_dependencies", return_value=[])
 @patch("shutil.which")
 @patch("briefly.install.is_ollama_running", return_value=True)
 @patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"])
-@patch("sys.stdout")
-def test_run_install_full_success(mock_stdout, mock_models, mock_running, mock_which, mock_deps, mock_ip, tmp_path):
+@patch("briefly.install.check_disk_space", return_value=(True, "10.0 GB frei"))
+@patch("briefly.install.check_port_availability", return_value=(True, "Frei"))
+@patch("subprocess.run")
+def test_run_install_full_success(
+    mock_run, mock_port, mock_disk, mock_models, mock_running, mock_which, mock_deps, mock_ip, tmp_path, capsys
+):
     project_root = tmp_path / "briefly_project"
-    project_root.mkdir()
-    
-    config_dir = project_root / "config"
-    config_dir.mkdir()
-    (config_dir / "config.example.yaml").write_text("delivery:\n  base_url: \"http://<mac-lan-ip>:8787\"\nllm:\n  model: qwen3:8b\ntts:\n  voice_de: de_voice\n  voice_en: en_voice\n  voices_dir: data/voices\nsources:\n  inbox:\n    path: data/inbox\nweb:\n  host: 0.0.0.0\n", encoding="utf-8")
-    
-    scripts_dir = project_root / "scripts" / "launchd"
-    scripts_dir.mkdir(parents=True)
-    (scripts_dir / "com.briefly.dailyrun.plist").write_text("__PYTHON_BIN__\n__PROJECT_DIR__")
-    (scripts_dir / "com.briefly.web.plist").write_text("__PYTHON_BIN__\n__PROJECT_DIR__")
-    
-    # Piper voices setup
-    voices_dir = project_root / "data" / "voices"
-    voices_dir.mkdir(parents=True)
-    (voices_dir / "de_voice.onnx").write_text("onnx")
-    (voices_dir / "de_voice.onnx.json").write_text("json")
-    (voices_dir / "en_voice.onnx").write_text("onnx")
-    (voices_dir / "en_voice.onnx.json").write_text("json")
+    _setup_mock_project_root(project_root)
     
     mock_which.side_effect = lambda cmd: "/usr/local/bin/" + cmd
+    mock_run.return_value = MagicMock(returncode=0)
     
     with patch("briefly.install._get_project_root", return_value=project_root):
         ret = run_install(interactive=False)
-        
         assert ret == 0
         assert (project_root / "config.yaml").exists()
         config_content = (project_root / "config.yaml").read_text(encoding="utf-8")
         assert "http://192.168.1.100:8787" in config_content
-        
-        # Verify launchd plists generated
-        assert (project_root / "output" / "com.briefly.dailyrun.plist").exists()
-        assert (project_root / "output" / "com.briefly.web.plist").exists()
-        
-        dailyrun_content = (project_root / "output" / "com.briefly.dailyrun.plist").read_text()
-        assert sys.executable in dailyrun_content
-        assert str(project_root.resolve()) in dailyrun_content
 
 
-@patch("briefly.install.check_python_dependencies", return_value=["pydantic", "pyyaml"])
-@patch("sys.stdout")
-def test_run_install_missing_dependency(mock_stdout, mock_deps, tmp_path):
+# Failure path tests using context manager mocks
+
+def test_run_install_missing_dependency(tmp_path, capsys):
     project_root = tmp_path / "briefly_project"
-    project_root.mkdir()
-    
-    config_dir = project_root / "config"
-    config_dir.mkdir()
-    (config_dir / "config.example.yaml").write_text("llm:\n  model: qwen3:8b", encoding="utf-8")
-    
-    with patch("briefly.install._get_project_root", return_value=project_root):
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=["pydantic", "pyyaml"]):
+        
         ret = run_install(interactive=False)
         assert ret == 1
+        captured = capsys.readouterr()
+        assert "Python-Pakete" in captured.out or "Python-Pakete" in captured.err
+        assert "pip install -e ." in captured.out or "pip install -e ." in captured.err
 
+
+def test_run_install_config_syntax_error(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+    
+    # Write invalid config.yaml first to trigger load error
+    (project_root / "config.yaml").write_text("invalid_yaml: [unbalanced", encoding="utf-8")
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]):
+        
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Konfiguration konnte nicht geladen werden" in captured.err or "Konfiguration konnte nicht geladen werden" in captured.out
+
+
+def test_run_install_no_write_permission(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.verify_write_permission", return_value=False):
+        
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Schreibrechte fehlen" in captured.out or "Schreibrechte" in captured.err
+
+
+def test_run_install_low_disk_space(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(False, "1.2 GB frei")):
+        
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Speicherplatz" in captured.out or "Speicherplatz" in captured.err
+
+
+def test_run_install_ffmpeg_missing(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", side_effect=lambda name: None if name == "ffmpeg" else "/usr/local/bin/" + name):
+        
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "ffmpeg" in captured.out or "ffmpeg" in captured.err
+
+
+def test_run_install_port_in_use(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(False, "Belegt")):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Port belegt" in captured.out or "Port" in captured.err
+
+
+def test_run_install_ollama_missing(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", side_effect=lambda name: "/usr/local/bin/ffmpeg" if name == "ffmpeg" else None), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Ollama: Die Anwendung 'Ollama' ist nicht auf deinem System installiert" in captured.out
+
+
+def test_run_install_ollama_not_running(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=False):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Ollama-Hintergrunddienst läuft nicht" in captured.out
+
+
+def test_run_install_ollama_model_missing(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["different-model:latest"]):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Ollama Modell: Das Modell" in captured.out
+
+
+def test_run_install_voices_missing(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
+         patch("briefly.install.check_piper_voice", return_value=False):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 1
+        captured = capsys.readouterr()
+        assert "Piper-Stimme" in captured.out

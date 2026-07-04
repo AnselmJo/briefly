@@ -6,8 +6,8 @@ import sys
 
 # Frühe Prüfung auf grundlegende Abhängigkeiten, um unschöne Tracebacks zu vermeiden
 try:
-    import yaml
-    import pydantic
+    import yaml  # noqa: F401
+    import pydantic  # noqa: F401
 except ImportError as e:
     missing_name = e.name if hasattr(e, "name") else "pydantic/pyyaml"
     print(f"Fehler: Eine oder mehrere erforderliche Python-Abhängigkeiten fehlen ({missing_name}).", file=sys.stderr)
