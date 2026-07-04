@@ -24,16 +24,41 @@ Sobald Briefly installiert ist, kannst du sofort loslegen:
 
 ## 📥 Installation
 
-Wähle die passende Anleitung für dein Betriebssystem aus:
+Am einfachsten installierst du Briefly mit dem automatischen Einzeilen-Installer. Dieser überprüft dein System, installiert fehlende Programme (wie Python, FFmpeg oder die KI) automatisch und richtet die Arbeitsumgebung ein.
+
+### 🍏 macOS (Apple Silicon & Intel)
+Öffne das Terminal und füge folgenden Befehl ein:
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnselmJo/briefly/main/install.sh | bash
+```
+*Tipp: Du kannst vorab mit einem Testlauf (Dry Run) prüfen, was der Installer tun würde:*
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnselmJo/briefly/main/install.sh | bash -s -- --dry-run
+```
+
+### 🔌 Windows 10 / 11
+Öffne die PowerShell und füge folgenden Befehl ein:
+```powershell
+irm https://raw.githubusercontent.com/AnselmJo/briefly/main/install.ps1 | iex
+```
+*Tipp: Du kannst vorab einen Testlauf (Dry Run) durchführen:*
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/AnselmJo/briefly/main/install.ps1))) -DryRun
+```
+
+---
 
 <details>
-<summary><b>💻 Installation auf macOS (Apple Silicon & Intel Macs)</b></summary>
+<summary><b>🛠️ Manuelle Installation (Alternative & Fehlerbehebung)</b></summary>
 
-### Schritt 1: Programme & Werkzeuge installieren
+Falls die automatische Einzeilen-Installation fehlschlägt oder du die Schritte manuell durchführen möchtest, kannst du dieser Anleitung folgen:
+
+### Manuelle Installation auf macOS:
+
+#### Schritt 1: Programme & Werkzeuge installieren
 Du brauchst ein Paket-Verwaltungsprogramm namens **Homebrew**, um Python, FFmpeg (für Audio) und Ollama (für die KI) zu installieren.
-
 1. Drücke `Cmd + Leertaste`, tippe **Terminal** ein und öffne die Terminal-App.
-2. Kopiere folgenden Befehl, füge ihn im Terminal ein und drücke `Enter` (folge den Anweisungen auf dem Bildschirm):
+2. Kopiere folgenden Befehl, füge ihn im Terminal ein und drücke `Enter`:
    ```bash
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
@@ -42,14 +67,14 @@ Du brauchst ein Paket-Verwaltungsprogramm namens **Homebrew**, um Python, FFmpeg
    brew install python ffmpeg ollama git
    ```
 
-### Schritt 2: Ollama starten & KI-Modell herunterladen
+#### Schritt 2: Ollama starten & KI-Modell herunterladen
 1. Öffne **Ollama** über deine macOS Spotlight-Suche (`Cmd + Leertaste` -> Ollama). Ein kleines Lama-Symbol erscheint oben rechts in deiner Menüleiste.
-2. Lade das KI-Sprachmodell herunter, indem du folgenden Befehl im Terminal ausführst:
+2. Lade das KI-Sprachmodell herunter:
    ```bash
    ollama pull qwen2.5:7b
    ```
 
-### Schritt 3: Briefly herunterladen & einrichten
+#### Schritt 3: Briefly herunterladen & einrichten
 1. Kopiere das Briefly-Repository auf deinen Mac:
    ```bash
    git clone https://github.com/AnselmJo/briefly.git
@@ -68,46 +93,41 @@ Du brauchst ein Paket-Verwaltungsprogramm namens **Homebrew**, um Python, FFmpeg
    pip install -e .
    briefly install
    ```
-   *Folge den Anweisungen des Assistenten, um die deutschen Sprechstimmen herunterzuladen und den täglichen Hintergrund-Dienst einzurichten.*
 
-</details>
+### Manuelle Installation auf Windows:
 
-<details>
-<summary><b>🔌 Installation auf Windows 10 / 11</b></summary>
-
-### Schritt 1: Systemprogramme installieren
-Unter Windows nutzen wir den eingebauten Paketmanager `winget`, um alles Notwendige mit einem Rutsch zu installieren.
-
+#### Schritt 1: Systemprogramme installieren
+Unter Windows nutzen wir den Paketmanager `winget`.
 1. Drücke die `Windows-Taste`, tippe **PowerShell** ein, mache einen Rechtsklick auf *Windows PowerShell* und wähle **Als Administrator ausführen**.
 2. Kopiere diesen Befehl in das PowerShell-Fenster und drücke `Enter`:
    ```powershell
    winget install Python.Python.3.12 Gyan.FFmpeg Ollama.Ollama Git.Git
    ```
-3. **Wichtig:** Schließe das PowerShell-Fenster und öffne ein neues (ohne Administratorrechte), damit die neuen Befehle erkannt werden.
+3. Schließe das PowerShell-Fenster und öffne ein neues (ohne Administratorrechte).
 
-### Schritt 2: Ollama starten & KI-Modell herunterladen
-1. Starte **Ollama** über dein Windows-Startmenü. Unten rechts in der Taskleiste siehst du nun das Lama-Symbol.
-2. Lade das Standard-Sprachmodell im PowerShell-Fenster herunter:
+#### Schritt 2: Ollama starten & KI-Modell herunterladen
+1. Starte **Ollama** über dein Windows-Startmenü.
+2. Lade das Standard-Sprachmodell herunter:
    ```powershell
    ollama pull qwen2.5:7b
    ```
 
-### Schritt 3: Briefly herunterladen & einrichten
+#### Schritt 3: Briefly herunterladen & einrichten
 1. Lade Briefly auf deinen PC herunter:
-   ```powershell
+   ```bash
    git clone https://github.com/AnselmJo/briefly.git
    ```
 2. Navigiere in den Ordner:
-   ```powershell
+   ```bash
    cd briefly
    ```
 3. Erstelle eine Python-Umgebung und aktiviere sie:
-   ```powershell
+   ```bash
    python -m venv .venv
    .venv\Scripts\Activate.ps1
    ```
 4. Installiere Briefly und führe die automatische Einrichtung aus:
-   ```powershell
+   ```bash
    pip install -e .
    briefly install
    ```
