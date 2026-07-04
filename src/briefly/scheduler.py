@@ -104,14 +104,16 @@ def _register_daily_run_macos(
     plist_dir.mkdir(parents=True, exist_ok=True)
     plist_path = plist_dir / f"{MACOS_DAILY_LABEL}.plist"
 
-    # Load templates
-    tpl_path = project_dir / "scripts" / "launchd" / f"{MACOS_DAILY_LABEL}.plist"
-    if not tpl_path.exists():
-        print(f"Fehler: launchd-Vorlage nicht gefunden unter: {tpl_path}", file=sys.stderr)
+    # Load templates using importlib.resources
+    import importlib.resources
+    try:
+        tpl_file = importlib.resources.files("briefly.templates.launchd").joinpath(f"{MACOS_DAILY_LABEL}.plist")
+        content = tpl_file.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"Fehler: launchd-Vorlage {MACOS_DAILY_LABEL}.plist nicht gefunden via importlib.resources: {e}", file=sys.stderr)
         return False
 
     try:
-        content = tpl_path.read_text(encoding="utf-8")
         content = content.replace("__PYTHON_BIN__", str(python_bin.resolve()))
         content = content.replace("__PROJECT_DIR__", str(project_dir.resolve()))
         content = content.replace("<integer>5</integer>", f"<integer>{hour}</integer>")
@@ -137,13 +139,16 @@ def _register_web_server_macos(
     plist_dir.mkdir(parents=True, exist_ok=True)
     plist_path = plist_dir / f"{MACOS_WEB_LABEL}.plist"
 
-    tpl_path = project_dir / "scripts" / "launchd" / f"{MACOS_WEB_LABEL}.plist"
-    if not tpl_path.exists():
-        print(f"Fehler: launchd-Vorlage nicht gefunden unter: {tpl_path}", file=sys.stderr)
+    # Load templates using importlib.resources
+    import importlib.resources
+    try:
+        tpl_file = importlib.resources.files("briefly.templates.launchd").joinpath(f"{MACOS_WEB_LABEL}.plist")
+        content = tpl_file.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"Fehler: launchd-Vorlage {MACOS_WEB_LABEL}.plist nicht gefunden via importlib.resources: {e}", file=sys.stderr)
         return False
 
     try:
-        content = tpl_path.read_text(encoding="utf-8")
         content = content.replace("__PYTHON_BIN__", str(python_bin.resolve()))
         content = content.replace("__PROJECT_DIR__", str(project_dir.resolve()))
         content = content.replace("0.0.0.0", host)

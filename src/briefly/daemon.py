@@ -156,14 +156,17 @@ def start_daemon(config_path: Path) -> int:
         python_bin = Path(sys.executable)
         project_root = config_path.parent
         # Try to register the daily run task using the hour/minute configured
-        scheduler.register_daily_run(
+        registered = scheduler.register_daily_run(
             python_bin=python_bin,
             project_dir=project_root,
             hour=config.schedule.hour,
             minute=config.schedule.minute,
             interactive=False
         )
-        print("Scheduler registriert / überprüft.")
+        if registered:
+            print("Scheduler registriert / überprüft.")
+        else:
+            print("Hinweis: Scheduler konnte nicht automatisch registriert werden.", file=sys.stderr)
     except Exception as e:
         print(f"Hinweis: Scheduler konnte nicht automatisch registriert werden: {e}", file=sys.stderr)
 

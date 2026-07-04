@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.briefly.dailyrun</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>-m</string>
+        <string>briefly.cli</string>
+        <string>run</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_DIR__</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__PROJECT_DIR__/output/dailyrun.log</string>
+    <key>StandardErrorPath</key>
+    <string>__PROJECT_DIR__/output/dailyrun.error.log</string>
+</dict>
+</plist>
