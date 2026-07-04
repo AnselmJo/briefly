@@ -111,11 +111,16 @@ tts:
 ```
 
 
-Web-Oberfläche starten (Eingaben/Einstellungen + Feed-Auslieferung):
+Web-Oberfläche im Hintergrund starten (Eingaben/Einstellungen + Feed-Auslieferung):
 
 ```bash
-uvicorn briefly.web.app:app --host 0.0.0.0 --port 8787
+briefly start
 ```
+
+Du kannst den Dienst steuern und überprüfen mit:
+- `briefly stop` (stoppt den Webserver)
+- `briefly status` (zeigt den aktuellen System- und Server-Status)
+- `briefly restart` (startet den Webserver neu)
 
 Danach von einem beliebigen Gerät im selben Heim-WLAN
 `http://<mac-lan-ip>:8787` öffnen.

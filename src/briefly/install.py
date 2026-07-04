@@ -459,8 +459,8 @@ def run_install(interactive: bool = True) -> int:
         print(f"2. Der Webserver läuft bereits im Hintergrund (über {service_mgr}).")
         print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
     else:
-        print("2. Starte den Webserver manuell im Terminal:")
-        print(f"   uvicorn briefly.web.app:app --host 0.0.0.0 --port {web_port}")
+        print("2. Starte den Webserver im Hintergrund:")
+        print("   briefly start")
         print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
         
     # 3. RSS-Feed abonnieren erklären

@@ -124,13 +124,46 @@ def run_deliver(
 
 def run_all(config: Config, episode_date: date | None = None) -> EpisodeManifest:
     """Führt alle fünf Stufen nacheinander aus (nächtlicher Standardlauf)."""
+    import json
+    from datetime import datetime
+    from briefly.config import get_user_dir
+
     resolved_date = episode_date or date.today()
-    items = run_collect(config)
-    grouped = run_curate(items, config)
-    script = run_script(grouped, config)
-    manifest = run_audio(script, config, resolved_date)
-    run_deliver(manifest, config)
-    return manifest
+    try:
+        items = run_collect(config)
+        grouped = run_curate(items, config)
+        script = run_script(grouped, config)
+        manifest = run_audio(script, config, resolved_date)
+        run_deliver(manifest, config)
+        
+        # Save success state
+        try:
+            state = {
+                "timestamp": datetime.now().isoformat(),
+                "success": True,
+                "error": None
+            }
+            user_dir = get_user_dir()
+            user_dir.mkdir(parents=True, exist_ok=True)
+            (user_dir / "last_run.json").write_text(json.dumps(state), encoding="utf-8")
+        except Exception:
+            pass
+            
+        return manifest
+    except Exception as e:
+        # Save failure state
+        try:
+            state = {
+                "timestamp": datetime.now().isoformat(),
+                "success": False,
+                "error": str(e)
+            }
+            user_dir = get_user_dir()
+            user_dir.mkdir(parents=True, exist_ok=True)
+            (user_dir / "last_run.json").write_text(json.dumps(state), encoding="utf-8")
+        except Exception:
+            pass
+        raise e
 
 
 def _render_transcript(script: EpisodeScript) -> str:
