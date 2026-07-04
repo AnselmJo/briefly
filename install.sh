@@ -2,11 +2,23 @@
 set -e
 
 DRY_RUN=false
+ASSUME_YES=false
 for arg in "$@"; do
   if [ "$arg" = "--dry-run" ] || [ "$arg" = "-d" ]; then
     DRY_RUN=true
+  elif [ "$arg" = "--yes" ] || [ "$arg" = "-y" ]; then
+    ASSUME_YES=true
   fi
 done
+
+# Check if a TTY is available
+if [ -t 0 ]; then
+  HAS_TTY=true
+elif [ -c /dev/tty ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+  HAS_TTY=true
+else
+  HAS_TTY=false
+fi
 
 run_cmd() {
   if [ "$DRY_RUN" = true ]; then
@@ -25,7 +37,12 @@ fi
 # 1. Check for Homebrew
 if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is missing. Installing Homebrew..."
-  run_cmd /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  if [ "$HAS_TTY" = true ]; then
+    run_cmd /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty
+  else
+    echo "No terminal detected, skipping interactive prompts, defaults applied"
+    NONINTERACTIVE=1 run_cmd /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  fi
   # Load homebrew for the current session if just installed
   if [ -f /opt/homebrew/bin/brew ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -94,10 +111,19 @@ fi
 
 # 6. Run Briefly installer assistant
 echo "Running setup assistant..."
+INSTALL_ARGS=()
+if [ "$ASSUME_YES" = true ]; then
+  INSTALL_ARGS+=("--yes")
+fi
+
 if [ "$DRY_RUN" = true ]; then
-  run_cmd "$PROJECT_DIR/.venv/bin/briefly" install
+  run_cmd "$PROJECT_DIR/.venv/bin/briefly" install "${INSTALL_ARGS[@]}"
 else
-  "$PROJECT_DIR/.venv/bin/briefly" install
+  if [ "$HAS_TTY" = true ] && [ "$ASSUME_YES" = false ]; then
+    "$PROJECT_DIR/.venv/bin/briefly" install "${INSTALL_ARGS[@]}" < /dev/tty
+  else
+    "$PROJECT_DIR/.venv/bin/briefly" install "${INSTALL_ARGS[@]}"
+  fi
 fi
 
 echo "=== Briefly Setup Completed successfully ==="

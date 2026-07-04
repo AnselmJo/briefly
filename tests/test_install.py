@@ -426,3 +426,52 @@ def test_run_install_ollama_model_already_present_short_circuits(tmp_path):
         # Verify subprocess.run was NOT called to pull qwen3:8b since it is already present
         for call in mock_run.call_args_list:
             assert "pull" not in call[0][0]
+
+
+def test_read_input_from_tty_with_tty():
+    from briefly.install import read_input_from_tty
+    with patch("sys.stdin.isatty", return_value=True), \
+         patch("sys.stdin.readline", return_value="Yes\n"):
+        res, has_tty = read_input_from_tty("Test prompt: ")
+        assert res == "yes"
+        assert has_tty is True
+
+
+def test_read_input_from_tty_no_tty_fallback():
+    from briefly.install import read_input_from_tty
+    # Mock isatty to return False, and mock builtins.open to raise an exception (simulating no /dev/tty or CON)
+    with patch("sys.stdin.isatty", return_value=False), \
+         patch("builtins.open", side_effect=OSError("No such device")):
+        res, has_tty = read_input_from_tty("Test prompt: ", default_if_no_tty="custom_default")
+        assert res == "custom_default"
+        assert has_tty is False
+
+
+def test_run_install_assume_yes(tmp_path):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
+         patch("briefly.install.check_piper_voice", side_effect=[False, False, True, True]):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        # When assume_yes=True, optional steps (like voice download and scheduler) should be accepted automatically
+        ret = run_install(interactive=True, assume_yes=True)
+        assert ret == 0
+        
+        # Verify subprocess.run was called to download voice packages
+        mock_run.assert_any_call(
+            [sys.executable, "-m", "piper.download_voices", "de_voice", "--data-dir", ANY],
+            check=True
+        )
+        mock_run.assert_any_call(
+            [sys.executable, "-m", "piper.download_voices", "en_voice", "--data-dir", ANY],
+            check=True
+        )

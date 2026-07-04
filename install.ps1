@@ -1,9 +1,12 @@
 param(
     [switch]$DryRun,
-    [alias("d")] [switch]$d
+    [alias("d")] [switch]$d,
+    [switch]$Yes,
+    [alias("y")] [switch]$y
 )
 
 $IsDryRun = $DryRun -or $d
+$AssumeYes = $Yes -or $y
 
 function Run-Command {
     param(
@@ -80,7 +83,11 @@ Run-Command "install Briefly dependencies" {
 
 # 6. Run setup assistant
 Run-Command "run Briefly setup assistant" {
-    & "$projectDir\.venv\Scripts\briefly.exe" install
+    $installArgs = @()
+    if ($AssumeYes) {
+        $installArgs += "--yes"
+    }
+    & "$projectDir\.venv\Scripts\briefly.exe" install $installArgs
 }
 
 Write-Host "=== Briefly Setup Completed successfully ===" -ForegroundColor Green

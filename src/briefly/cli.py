@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
         
         if args.command == "install":
             from briefly.install import run_install
-            return run_install(interactive=True)
+            return run_install(interactive=not args.yes, assume_yes=args.yes)
 
         if args.command == "doctor":
             from briefly.doctor import run_doctor
@@ -170,8 +170,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="briefly", description="Briefly – tägliches Audio-Briefing")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG_PATH), help="Pfad zur config.yaml")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("run", "collect", "curate", "script", "audio", "deliver", "install", "doctor", "start", "stop", "status", "restart", "update"):
+    
+    # Simple subcommands
+    for name in ("run", "collect", "curate", "script", "audio", "deliver", "doctor", "start", "stop", "status", "restart", "update"):
         subparsers.add_parser(name)
+        
+    # install command with --yes flag
+    install_parser = subparsers.add_parser("install")
+    install_parser.add_argument("-y", "--yes", action="store_true", help="Automatische Bestätigung aller optionalen Fragen")
+    
     return parser
 
 

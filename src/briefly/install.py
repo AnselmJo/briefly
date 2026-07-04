@@ -165,7 +165,36 @@ def _get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def run_install(interactive: bool = True) -> int:
+_TTY_NOTICE_PRINTED = False
+
+def read_input_from_tty(prompt_message: str, default_if_no_tty: str = "") -> tuple[str, bool]:
+    """Attempts to read from a TTY, falling back to safe defaults if not available."""
+    global _TTY_NOTICE_PRINTED
+    # Print prompt
+    print(prompt_message, end="")
+    sys.stdout.flush()
+    
+    # Try stdin if it's a TTY
+    if sys.stdin.isatty():
+        try:
+            return sys.stdin.readline().strip().lower(), True
+        except Exception:
+            return "", True
+            
+    # Try opening /dev/tty or CON
+    tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
+    try:
+        with open(tty_path, "r", encoding="utf-8") as tty:
+            return tty.readline().strip().lower(), True
+    except Exception:
+        # No TTY is available
+        if not _TTY_NOTICE_PRINTED:
+            print("\nNo terminal detected, skipping interactive prompts, defaults applied")
+            _TTY_NOTICE_PRINTED = True
+        return default_if_no_tty, False
+
+
+def run_install(interactive: bool = True, assume_yes: bool = False) -> int:
     """Führt den kompletten Installations- und Einrichtungs-Assistenten aus."""
     print("======================================================================")
     print("          Briefly (Daily Cast) - Installations-Assistent")
@@ -287,20 +316,22 @@ def run_install(interactive: bool = True) -> int:
     hour = config.schedule.hour if config else 5
     minute = config.schedule.minute if config else 30
     
+    no_tty_skipped_scheduler = False
     if scheduler.is_macos() or scheduler.is_windows():
         confirm = False
-        if interactive:
+        if assume_yes:
+            confirm = True
+        elif interactive:
             platform_name = "launchd-Dienste" if scheduler.is_macos() else "Scheduled Tasks"
             schedule_msg = "täglich um 05:30 Uhr auszuführen" if not config else f"täglich um {hour:02d}:{minute:02d} Uhr auszuführen"
             print(f"\n--- {platform_name} konfigurieren ---")
-            print("Möchtest du die Hintergrunddienste installieren, um Briefly")
-            print(f"{schedule_msg} und den Webserver im Hintergrund zu starten? (y/N): ", end="")
-            sys.stdout.flush()
-            try:
-                response = sys.stdin.readline().strip().lower()
+            prompt_str = f"Möchtest du die Hintergrunddienste installieren, um Briefly\n{schedule_msg} und den Webserver im Hintergrund zu starten? (y/N): "
+            response, tty_available = read_input_from_tty(prompt_str, default_if_no_tty="n")
+            if tty_available:
                 confirm = response in ("y", "yes")
-            except Exception:
+            else:
                 confirm = False
+                no_tty_skipped_scheduler = True
             scheduler_prompted = True
         
         if confirm:
@@ -360,9 +391,15 @@ def run_install(interactive: bool = True) -> int:
     print_status("Webserver-Konfiguration", web_config_ok, warning=not web_config_ok, info="Optimal" if web_config_ok else "Warnung")
     
     if scheduler.is_macos():
-        print_status("launchd-Dienste", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
+        if no_tty_skipped_scheduler:
+            print_status("launchd-Dienste", False, warning=True, info="skipped: no interactive terminal")
+        else:
+            print_status("launchd-Dienste", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
     elif scheduler.is_windows():
-        print_status("Windows Scheduled Tasks", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
+        if no_tty_skipped_scheduler:
+            print_status("Windows Scheduled Tasks", False, warning=True, info="skipped: no interactive terminal")
+        else:
+            print_status("Windows Scheduled Tasks", scheduler_installed, warning=not scheduler_installed and scheduler_prompted, info="Aktiv" if scheduler_installed else "Fehlgeschlagen/Abgelehnt")
     else:
         print_status("Hintergrund-Dienste", False, warning=True, info="Nur auf macOS/Windows verfügbar")
         
@@ -374,20 +411,21 @@ def run_install(interactive: bool = True) -> int:
     
     if download_de or download_en:
         confirm_download = False
-        if interactive:
+        if assume_yes:
+            confirm_download = True
+        elif interactive:
             print("\n--- Piper-Stimmen herunterladen ---")
             print("Folgende benötigte Stimmen fehlen auf deinem System:")
             if download_de:
                 print(f"  * Deutsch: {voice_de}")
             if download_en:
                 print(f"  * Englisch: {voice_en}")
-            print("Möchtest du diese Stimmen jetzt automatisch herunterladen? (Y/n): ", end="")
-            sys.stdout.flush()
-            try:
-                response = sys.stdin.readline().strip().lower()
+            prompt_str = "Möchtest du diese Stimmen jetzt automatisch herunterladen? (Y/n): "
+            response, tty_available = read_input_from_tty(prompt_str, default_if_no_tty="y")
+            if tty_available:
                 confirm_download = response in ("", "y", "yes")
-            except Exception:
-                confirm_download = False
+            else:
+                confirm_download = True  # Safe default: download missing voices
         else:
             confirm_download = True
             
