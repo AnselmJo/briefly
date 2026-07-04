@@ -177,7 +177,13 @@ def read_input_from_tty(prompt_message: str, default_if_no_tty: str = "") -> tup
     # Try stdin if it's a TTY
     if sys.stdin.isatty():
         try:
-            return sys.stdin.readline().strip().lower(), True
+            line = sys.stdin.readline()
+            if line == "":
+                raise EOFError()
+            return line.strip().lower(), True
+        except EOFError:
+            print("\nNo input received, skipping this step")
+            return "n", True
         except Exception:
             return "", True
             
@@ -185,7 +191,13 @@ def read_input_from_tty(prompt_message: str, default_if_no_tty: str = "") -> tup
     tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
     try:
         with open(tty_path, "r", encoding="utf-8") as tty:
-            return tty.readline().strip().lower(), True
+            line = tty.readline()
+            if line == "":
+                raise EOFError()
+            return line.strip().lower(), True
+    except EOFError:
+        print("\nNo input received, skipping this step")
+        return "n", True
     except Exception:
         # No TTY is available
         if not _TTY_NOTICE_PRINTED:
@@ -447,7 +459,7 @@ def run_install(interactive: bool = True, assume_yes: bool = False) -> int:
                         print(f"Fehler beim Herunterladen der Stimme {voice}: {e}")
 
     # Behebungsanweisungen ausgeben falls Fehler vorhanden sind
-    fatal_error = not python_ok or bool(missing_deps) or not dirs_ok or not disk_space_ok or not ffmpeg_ok or not port_ok or not ollama_installed or not ollama_running or not model_ok or not voice_de_ok or not voice_en_ok
+    fatal_error = not python_ok or bool(missing_deps) or not dirs_ok or not disk_space_ok or not ffmpeg_ok or not port_ok or not ollama_installed or not ollama_running or not model_ok
     
     if fatal_error or not web_config_ok:
         print("\n🛠️  FEHLERBEHEBUNG & EMPFEHLUNGEN:")

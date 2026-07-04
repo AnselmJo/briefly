@@ -382,7 +382,7 @@ def test_run_install_voices_missing_download_fails(tmp_path, capsys):
          patch("briefly.install.check_piper_voice", return_value=False):
          
         ret = run_install(interactive=False)
-        assert ret == 1
+        assert ret == 0
         captured = capsys.readouterr()
         assert "Fehler beim Herunterladen der Stimme" in captured.out
 
@@ -475,3 +475,24 @@ def test_run_install_assume_yes(tmp_path):
             [sys.executable, "-m", "piper.download_voices", "en_voice", "--data-dir", ANY],
             check=True
         )
+
+
+def test_read_input_from_tty_eof():
+    from briefly.install import read_input_from_tty
+    with patch("sys.stdin.isatty", return_value=True), \
+         patch("sys.stdin.readline", return_value=""):
+        res, has_tty = read_input_from_tty("Test prompt: ")
+        assert res == "n"
+        assert has_tty is True
+
+
+def test_read_input_from_tty_eof_dev_tty():
+    from briefly.install import read_input_from_tty
+    # stdin is not TTY, but opening tty returns EOF
+    mock_file = MagicMock()
+    mock_file.__enter__.return_value.readline.return_value = ""
+    with patch("sys.stdin.isatty", return_value=False), \
+         patch("builtins.open", return_value=mock_file):
+        res, has_tty = read_input_from_tty("Test prompt: ")
+        assert res == "n"
+        assert has_tty is True
