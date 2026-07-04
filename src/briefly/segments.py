@@ -170,7 +170,7 @@ FALLBACK_FUNFACTS_DE = {
     "nature": "Die heutige interessante Tatsache: Honigbienen können menschliche Gesichter erkennen. Sie nutzen eine Methode, bei der sie Augen, Ohren und Nasen zusammensetzen, genau wie wir.",
     "history": "Die heutige interessante Tatsache: Der kürzeste Krieg der Geschichte dauerte nur 38 Minuten. Er wurde 1896 zwischen dem Britischen Empire und dem Sultanat Sansibar geführt.",
     "science": "Die heutige interessante Tatsache: Wasser kann gleichzeitig kochen und gefrieren. Dies wird als Tripelpunkt bezeichnet, an dem Temperatur und Druck es erlauben, dass alle drei Aggregatzustände koexistieren.",
-    "space": "Die heutige interessante Tatsache: Ein Tag auf der Venus ist länger als ein Venus-Jahr. Die Venus benötigt 243 Erdentage für eine Drehung um die eigene Axhe, aber nur 225 Tage für einen Umlauf um die Sonne.",
+    "space": "Die heutige interessante Tatsache: Ein Tag auf der Venus ist länger als ein Venus-Jahr. Die Venus benötigt 243 Erdentage für eine Drehung um die eigene Achse, aber nur 225 Tage für einen Umlauf um die Sonne.",
     "human body": "Die heutige interessante Tatsache: Menschliche Knochen sind etwa viermal stabiler als Beton. Ein Knochenblock in der Größe einer Streichholzschachtel kann bis zu neun Tonnen Gewicht tragen.",
     "geography": "Die heutige interessante Tatsache: Kanada hat mehr Seen als der Rest der Welt zusammen. Über neun Prozent der Gesamtfläche des Landes sind von Süßwasser bedeckt.",
     "technology": "Die heutige interessante Tatsache: Der erste Computer-Bug war eine echte Motte. Im Jahr 1947 fanden Ingenieure in Harvard eine Motte, die in einem Relais des Mark-Zwei-Computers eingeklemmt war.",
@@ -579,6 +579,31 @@ def _build_funfact_prompt(topic: str, language: str) -> str:
         )
 
 
+def _build_summarize_prompt(content: str, max_words: int, language: str) -> str:
+    if language == "de":
+        return (
+            "Du bist ein Assistent für ein persönliches tägliches Audio-Briefing.\n"
+            f"Fasse den folgenden Eintrag so zusammen, dass er flüssig gesprochen werden kann und maximal {max_words} Wörter lang ist.\n"
+            "Wichtig: Antworte ausschließlich mit der fertigen Zusammenfassung ohne Einleitung, Begleittext oder Anmerkungen.\n\n"
+            f"Eintrag:\n{content}"
+        )
+    else:
+        return (
+            "You are an assistant for a personal daily audio briefing.\n"
+            f"Summarize the following entry so that it can be read aloud naturally and is at most {max_words} words long.\n"
+            "Important: Output only the summary itself without any introductory or concluding remarks.\n\n"
+            f"Entry:\n{content}"
+        )
+
+
+def truncate_words(text: str, max_words: int) -> str:
+    """Fallback truncation of words."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]) + "..."
+
+
 class BaseSegment:
     """Base class for all segment modules."""
 
@@ -770,6 +795,165 @@ class CalendarSegment(BaseSegment):
             return format_calendar_programmatically(processed_events, language)
 
 
+class InboxSegment(BaseSegment):
+    """Inbox segment."""
+
+    def collect(self, config: Config) -> list[dict[str, Any]] | None:
+        from pathlib import Path
+        inbox_dir = Path(config.sources.inbox.path)
+        if not inbox_dir.is_dir():
+            return None
+
+        import re
+
+        _ENTRY_SEPARATOR = re.compile(r"^---$", re.MULTILINE)
+        _TOPIC_HEADER = re.compile(r"^#thema:\s*(.+)$", re.IGNORECASE)
+        _PRIORITY_HEADER = re.compile(r"^#prio:\s*(\d+)$", re.IGNORECASE)
+        _RECURRING_HEADER = re.compile(r"^(?:#recurring|#wiederkehrend):\s*(true|yes|ja|1)\s*$", re.IGNORECASE)
+
+        collected_entries = []
+        archive_dir = inbox_dir / "archive"
+
+        for file_path in sorted(inbox_dir.glob("*.txt")):
+            try:
+                text = file_path.read_text(encoding="utf-8")
+
+                blocks = _ENTRY_SEPARATOR.split(text)
+                recurring_blocks = []
+                archived_blocks = []
+
+                for block in blocks:
+                    block_stripped = block.strip()
+                    if not block_stripped:
+                        continue
+
+                    lines = block_stripped.splitlines()
+                    topic = None
+                    priority = 0
+                    recurring = False
+                    body_start = 0
+
+                    for line in lines:
+                        line_stripped = line.strip()
+                        if match := _TOPIC_HEADER.match(line_stripped):
+                            topic = match.group(1).strip()
+                            body_start += 1
+                        elif match := _PRIORITY_HEADER.match(line_stripped):
+                            priority = int(match.group(1))
+                            body_start += 1
+                        elif match := _RECURRING_HEADER.match(line_stripped):
+                            val = match.group(1).lower()
+                            recurring = val in ("true", "yes", "ja", "1")
+                            body_start += 1
+                        else:
+                            break
+
+                    content = "\n".join(lines[body_start:]).strip()
+                    if not content:
+                        continue
+
+                    entry_item = {
+                        "content": content,
+                        "topic": topic,
+                        "priority": priority,
+                        "recurring": recurring,
+                        "source_name": file_path.name,
+                    }
+
+                    collected_entries.append(entry_item)
+
+                    if recurring:
+                        recurring_blocks.append(block_stripped)
+                    else:
+                        archived_blocks.append(block_stripped)
+
+                if archived_blocks:
+                    archive_dir.mkdir(parents=True, exist_ok=True)
+                    archive_file = archive_dir / f"archived_{file_path.name}"
+
+                    existing_archive_text = ""
+                    if archive_file.exists():
+                        existing_archive_text = archive_file.read_text(encoding="utf-8")
+                        if existing_archive_text.strip():
+                            existing_archive_text += "\n---\n"
+
+                    new_archive_text = existing_archive_text + "\n---\n".join(archived_blocks)
+                    archive_file.write_text(new_archive_text, encoding="utf-8")
+
+                if recurring_blocks:
+                    file_path.write_text("\n---\n".join(recurring_blocks), encoding="utf-8")
+                else:
+                    file_path.unlink(missing_ok=True)
+
+            except Exception as e:
+                logger.warning("Failed to process inbox file %s: %s", file_path, e)
+
+        return collected_entries
+
+    def script(
+        self,
+        config: Config,
+        data: Any,
+        llm_provider: LanguageModelProvider,
+        language: str,
+        episode_date: date | None = None,
+    ) -> str:
+        if not data:
+            return ""
+
+        max_duration = getattr(config.inbox, "max_duration_seconds", 60)
+        max_words = int(max_duration * 2.5)
+
+        script_parts = []
+
+        if language == "de":
+            script_parts.append("Hier sind einige Einträge aus deinen persönlichen Notizen.")
+        else:
+            script_parts.append("Here are some entries from your personal inbox.")
+
+        for item in data:
+            content = item["content"]
+            topic = item["topic"]
+
+            word_count = len(content.split())
+            if word_count > max_words:
+                prompt = _build_summarize_prompt(content, max_words, language)
+                try:
+                    summary = llm_provider.generate_segment_text(prompt)
+                    content = summary.strip()
+                except Exception as e:
+                    logger.warning("Failed to summarize long inbox entry via LLM: %s", e)
+                    content = truncate_words(content, max_words)
+
+            transition = ""
+            if language == "de":
+                if topic == "book":
+                    transition = "Aus deinen Buchnotizen:"
+                elif topic == "reading":
+                    transition = "Aus deinen Lesezeichen:"
+                elif topic == "link":
+                    transition = "Aus deinen gespeicherten Links:"
+                elif topic:
+                    transition = f"Zum Thema {topic}:"
+                else:
+                    transition = "Aus deinem Posteingang:"
+            else:
+                if topic == "book":
+                    transition = "From your book notes:"
+                elif topic == "reading":
+                    transition = "From your reading notes:"
+                elif topic == "link":
+                    transition = "From your saved links:"
+                elif topic:
+                    transition = f"Regarding {topic}:"
+                else:
+                    transition = "From your inbox:"
+
+            script_parts.append(f"{transition} {content}")
+
+        return " ".join(script_parts)
+
+
 class AffirmationSegment(BaseSegment):
     """Affirmation segment."""
 
@@ -874,19 +1058,13 @@ class NewsSegment(BaseSegment):
 
 
 class TopicsSegment(BaseSegment):
-    """Themen/Inbox-Segment für sonstige RSS-Feeds und persönliche Notizen."""
+    """Themen-Segment für sonstige RSS-Feeds."""
 
     def collect(self, config: Config) -> list[Item]:
         from briefly.curation import select_items
-        from briefly.sources.inbox import InboxSource
         from briefly.sources.rss import RssSource
 
         items = []
-        try:
-            items.extend(InboxSource(config.sources.inbox.path).fetch())
-        except Exception as e:
-            logger.warning("InboxSource im Topics-Segment fehlgeschlagen: %s", e)
-
         try:
             items.extend(RssSource(config.sources.rss.feeds).fetch())
         except Exception as e:
@@ -951,6 +1129,7 @@ _REGISTRY: dict[str, BaseSegment] = {
     "intro": IntroSegment("intro"),
     "weather": WeatherSegment("weather"),
     "calendar": CalendarSegment("calendar"),
+    "inbox": InboxSegment("inbox"),
     "news": NewsSegment("news"),
     "topics": TopicsSegment("topics"),
     "affirmation": AffirmationSegment("affirmation"),

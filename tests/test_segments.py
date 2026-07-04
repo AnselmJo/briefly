@@ -423,3 +423,75 @@ def test_funfact_segment_rotation_and_mock():
     
     res_fallback_de = segment.script(config, None, mock_llm_fail, "de", episode_date=d1)
     assert "Die heutige interessante Tatsache:" in res_fallback_de
+
+
+def test_inbox_collect_archive_and_recurring(tmp_path):
+    config = Config()
+    config.sources.inbox.path = tmp_path
+    
+    # Create test inbox files
+    # file1.txt: only non-recurring
+    file1 = tmp_path / "file1.txt"
+    file1.write_text("#thema: book\n#prio: 2\nThis is a book note.\n", encoding="utf-8")
+    
+    # file2.txt: non-recurring + recurring
+    file2 = tmp_path / "file2.txt"
+    file2.write_text("Normal note.\n---\n#thema: link\n#recurring: true\nhttp://example.com/item\n", encoding="utf-8")
+    
+    segment = get_segment_impl("inbox")
+    data = segment.collect(config)
+    
+    assert data is not None
+    assert len(data) == 3
+    
+    # Verify file1.txt was deleted because it had no recurring blocks
+    assert not file1.exists()
+    
+    # Verify file2.txt was rewritten to contain only the recurring block
+    assert file2.exists()
+    file2_text = file2.read_text(encoding="utf-8")
+    assert "http://example.com/item" in file2_text
+    assert "Normal note" not in file2_text
+    
+    # Verify archive/ folder exists and contains archived items
+    archive_dir = tmp_path / "archive"
+    assert archive_dir.is_dir()
+    
+    archived_file1 = archive_dir / "archived_file1.txt"
+    assert archived_file1.exists()
+    assert "This is a book note." in archived_file1.read_text(encoding="utf-8")
+    
+    archived_file2 = archive_dir / "archived_file2.txt"
+    assert archived_file2.exists()
+    assert "Normal note." in archived_file2.read_text(encoding="utf-8")
+
+
+def test_inbox_script_summarization_and_transitions():
+    config = Config()
+    config.inbox.max_duration_seconds = 10  # 10s * 2.5 = 25 words limit
+    segment = get_segment_impl("inbox")
+    
+    mock_data = [
+        {"content": "Short note.", "topic": "book", "recurring": False},
+        {"content": "A very long note with more than twenty-five words to force the summarizer to run and trigger a call to the local LLM which we mock here.", "topic": "link", "recurring": False}
+    ]
+    
+    # 1. Successful LLM summary path
+    mock_llm = MagicMock()
+    mock_llm.generate_segment_text.return_value = "This is a summarized note."
+    
+    res_en = segment.script(config, mock_data, mock_llm, "en")
+    assert "Here are some entries from your personal inbox." in res_en
+    assert "From your book notes: Short note." in res_en
+    assert "From your saved links: This is a summarized note." in res_en
+    
+    # 2. Failed LLM summary fallback path (truncation)
+    mock_llm_fail = MagicMock()
+    mock_llm_fail.generate_segment_text.side_effect = Exception("Ollama offline")
+    
+    res_de = segment.script(config, mock_data, mock_llm_fail, "de")
+    assert "Hier sind einige Einträge aus deinen persönlichen Notizen." in res_de
+    assert "Aus deinen Buchnotizen: Short note." in res_de
+    # The long link entry is truncated to 25 words with ...
+    assert "Aus deinen gespeicherten Links:" in res_de
+    assert res_de.endswith("...")

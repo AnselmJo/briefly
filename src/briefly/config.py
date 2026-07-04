@@ -392,6 +392,17 @@ class AffirmationConfig(BaseModel):
         return v
 
 
+class InboxConfig(BaseModel):
+    max_duration_seconds: int = 60
+
+    @field_validator("max_duration_seconds")
+    @classmethod
+    def validate_duration(cls, v: int) -> int:
+        if v < 5:
+            raise ValueError("inbox.max_duration_seconds must be at least 5")
+        return v
+
+
 class ScheduleConfig(BaseModel):
     hour: int = 5
     minute: int = 30
@@ -472,6 +483,7 @@ class Config(BaseModel):
         SegmentConfig(id="intro", enabled=True),
         SegmentConfig(id="weather", enabled=True),
         SegmentConfig(id="calendar", enabled=True),
+        SegmentConfig(id="inbox", enabled=True),
         SegmentConfig(id="news", enabled=True),
         SegmentConfig(id="topics", enabled=True),
         SegmentConfig(id="affirmation", enabled=True),
@@ -482,6 +494,7 @@ class Config(BaseModel):
     weather: WeatherConfig = Field(default_factory=WeatherConfig)
     calendar: CalendarConfig = Field(default_factory=CalendarConfig)
     affirmation: AffirmationConfig = Field(default_factory=AffirmationConfig)
+    inbox: InboxConfig = Field(default_factory=InboxConfig)
     target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
 

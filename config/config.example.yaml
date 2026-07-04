@@ -137,6 +137,12 @@ affirmation:
   # Mindestanzahl an Tagen, bevor sich eine Affirmation wiederholen darf
   no_repeat_window: 7
 
+# --- INBOX ---
+# Konfiguration für das tägliche Inbox-Segment.
+inbox:
+  # Maximale Sprechdauer pro Eintrag in Sekunden (längere Einträge werden vom LLM gekürzt)
+  max_duration_seconds: 60
+
 # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
 target_minutes: 10
 
