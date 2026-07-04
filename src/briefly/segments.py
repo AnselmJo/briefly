@@ -554,7 +554,7 @@ def _build_calendar_prompt(events: list[dict[str, Any]], language: str) -> str:
         SYSTEM_INSTRUCTIONS,
         "TASK:",
         f"Present today's calendar events and birthdays in {language} as a smooth spoken narrative.",
-        "Combine the entries naturally into a radio-host-style schedule. Output ONLY the spoken text, no lists, no headings, no Markdown.",
+        "Combine the entries naturally into a radio-host-style schedule. Output ONLY the spoken text, no lists, no headings, no Markdown. Do not write any greetings or introductory phrases; start directly with the schedule events.",
         "",
         "TODAY'S EVENTS:"
     ]
@@ -613,6 +613,7 @@ class BaseSegment:
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         """Erzeugt das Skript (Sprechtext) für dieses Segment."""
         return ""
@@ -628,6 +629,7 @@ class GreetingSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         d = episode_date or date.today()
         user_name = getattr(config, "user_name", "Anselm")
@@ -678,6 +680,7 @@ class WeatherSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         if not data:
             return ""
@@ -760,8 +763,11 @@ class CalendarSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         if not data:
+            if prev_segment is not None:
+                return "hast du keine Termine eingetragen." if language == "de" else "you have no events scheduled."
             return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
 
         target_date = episode_date or date.today()
@@ -777,6 +783,8 @@ class CalendarSegment(BaseSegment):
             processed_events.extend(filtered)
 
         if not processed_events:
+            if prev_segment is not None:
+                return "hast du keine Termine eingetragen." if language == "de" else "you have no events scheduled."
             return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
 
         prompt = _build_calendar_prompt(processed_events, language)
@@ -888,6 +896,7 @@ class InboxSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         if not data:
             return ""
@@ -897,10 +906,11 @@ class InboxSegment(BaseSegment):
 
         script_parts = []
 
-        if language == "de":
-            script_parts.append("Hier sind einige Einträge aus deinen persönlichen Notizen.")
-        else:
-            script_parts.append("Here are some entries from your personal inbox.")
+        if prev_segment is None:
+            if language == "de":
+                script_parts.append("Hier sind einige Einträge aus deinen persönlichen Notizen.")
+            else:
+                script_parts.append("Here are some entries from your personal inbox.")
 
         for item in data:
             content = item["content"]
@@ -955,6 +965,7 @@ class AffirmationSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         d = episode_date or date.today()
 
@@ -989,6 +1000,7 @@ class FunFactSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         d = episode_date or date.today()
 
@@ -1014,6 +1026,7 @@ class IntroSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         user_name = getattr(config, "user_name", "Anselm")
         prompt = (
@@ -1045,6 +1058,7 @@ class NewsSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         if not data:
             return ""
@@ -1075,6 +1089,7 @@ class TopicsSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
         if not data:
             return ""
@@ -1092,11 +1107,24 @@ class OutroSegment(BaseSegment):
         llm_provider: LanguageModelProvider,
         language: str,
         episode_date: date | None = None,
+        prev_segment: Any | None = None,
     ) -> str:
+        # Check if weather or calendar is enabled in config
+        enabled_ids = {s.id for s in config.segments if s.enabled}
+        weather_enabled = "weather" in enabled_ids
+        calendar_enabled = "calendar" in enabled_ids
+
+        extra_instructions = ""
+        if weather_enabled or calendar_enabled:
+            if language == "de":
+                extra_instructions = " Beziehe dich kurz auf das anstehende Wetter oder die heutigen Termine, um dem Hörer einen motivierten Start in den Tag zu wünschen (z.B. dass er trotz Regen gut gelaunt bleibt oder viel Erfolg bei seinen Plänen hat)."
+            else:
+                extra_instructions = " Make a brief reference to the upcoming weather or the day's schedule to wish the listener a good start to their day (e.g., wishing them a great day despite the weather, or good luck with their scheduled events/meetings)."
+
         prompt = (
             f"{SYSTEM_INSTRUCTIONS}\n"
             f"TASK:\n"
-            f"Write a warm, natural outro/ending for the daily audio briefing 'Briefly' in {language}.\n"
+            f"Write a warm, natural outro/ending for the daily audio briefing 'Briefly' in {language}.{extra_instructions}\n"
             f"Say goodbye to the listener, wish them a wonderful day, and make the ending flow naturally without a sudden cut.\n"
             f"Output ONLY the spoken text. No intro, no headings, no comments."
         )
@@ -1106,19 +1134,67 @@ class OutroSegment(BaseSegment):
 def _build_segment_prompt(
     segment_id: str, items: list[Item], language: str, target_minutes: int
 ) -> str:
+    if language == "de":
+        synthesize_instruction = (
+            "Verbinde die einzelnen Meldungen aus dem Quellmaterial mit geschmeidigen, "
+            "natürlichen Übergängen (z.B. indem du erzählst, wie ein Thema zum nächsten führt, "
+            "oder indem du Gegensätze/Fortsetzungen betonst). Zähle die Punkte nicht einfach auf und "
+            "springe nicht abrupt zwischen den Themen. Schreib wie ein professioneller Radiomoderator."
+        )
+    else:
+        synthesize_instruction = (
+            "Connect the stories in the source material with smooth, natural transitions "
+            "(e.g., explaining how one topic leads to another, or using contrast/continuation phrases). "
+            "Do not list items or jump abruptly between stories. Write like a professional radio or podcast host."
+        )
+
     lines = [
         SYSTEM_INSTRUCTIONS,
         "TASK:",
         f"Write the spoken script for the '{segment_id}' segment of Briefly in {language}.",
-        "Synthesize the source material below into a cohesive, flowing narrative. Do not list items or jump abruptly between stories. Use transition words.",
+        synthesize_instruction,
         f"Target duration is approximately {target_minutes} minutes. Keep it concise.",
-        "Output ONLY the final spoken script. No headings, no lists, no Markdown, no introduction or outro lines.",
+        "Output ONLY the final spoken script. No headings, no lists, no Markdown, no introduction or outro lines. Do not write any greetings or introductory transitions; start directly with the first story.",
         "",
         "SOURCE MATERIAL:"
     ]
     for item in items[:15]:
         lines.append(f"- {item.title}: {item.content}")
     return "\n".join(lines)
+
+
+_SEGMENT_TRANSITIONS = {
+    "de": {
+        "intro": "Hier ist eine kurze Übersicht über das, was ansteht.",
+        "weather": "Werfen wir als nächstes einen Blick auf das Wetter.",
+        "calendar": "Kommen wir nun zu deinen Terminen für heute.",
+        "inbox": "Jetzt schauen wir in deinen Posteingang und deine Notizen.",
+        "news": "Hier sind die aktuellen Schlagzeilen.",
+        "topics": "Zu anderen interessanten Themen des Tages:",
+        "affirmation": "Für einen positiven Start in den Tag folgt hier deine tägliche Affirmation:",
+        "funfact": "Und zum Schluss noch ein faszinierender Fakt:",
+        "outro": "Das war's für das heutige Briefing.",
+    },
+    "en": {
+        "intro": "Here is a quick overview of what's ahead.",
+        "weather": "Let's check the weather forecast next.",
+        "calendar": "Looking at your calendar for today,",
+        "inbox": "Now, let's see what's in your personal inbox.",
+        "news": "Turning now to the latest news,",
+        "topics": "In other topics today,",
+        "affirmation": "Here is today's affirmation to start your day on a positive note:",
+        "funfact": "And finally, a fascinating fun fact to share:",
+        "outro": "That's all we have for today's briefing.",
+    }
+}
+
+
+def get_segment_transition(segment_id: str, prev_segment_id: str | None, language: str) -> str:
+    """Returns a natural transition phrase to prepend to the current segment."""
+    if not prev_segment_id:
+        return ""
+    transitions = _SEGMENT_TRANSITIONS.get(language, _SEGMENT_TRANSITIONS["en"])
+    return transitions.get(segment_id, "")
 
 
 # Registry of segment implementations

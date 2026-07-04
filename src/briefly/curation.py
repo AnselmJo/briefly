@@ -212,7 +212,17 @@ def select_items(items: list[Item], config: Config, history: list[dict[str, Any]
         final_selection.append(best_item)
         remaining_candidates.remove(best_item)
 
-    return final_selection
+    return order_by_topic(final_selection)
+
+
+def order_by_topic(items: list[Item]) -> list[Item]:
+    """Orders items so that items with the same topic are adjacent, preserving relative order."""
+    seen_topics = []
+    for item in items:
+        topic_key = item.topic or ""
+        if topic_key not in seen_topics:
+            seen_topics.append(topic_key)
+    return sorted(items, key=lambda item: seen_topics.index(item.topic or ""))
 
 
 def group_by_segment(items: list[Item], segment_profile: list[str]) -> dict[str, list[Item]]:

@@ -67,7 +67,7 @@ def run_script(
     episode_date: date | None = None,
 ) -> EpisodeScript:
     """Stufe 3: lässt das LLM das Sprechtext-Skript segmentweise schreiben."""
-    from briefly.segments import get_segment_impl
+    from briefly.segments import get_segment_impl, get_segment_transition
     from briefly.models import ScriptSegment
 
     provider = llm_provider or OllamaLanguageModelProvider(
@@ -75,6 +75,7 @@ def run_script(
     )
     
     script_segments: list[ScriptSegment] = []
+    prev_segment: ScriptSegment | None = None
     
     for seg_conf in config.segments:
         if not seg_conf.enabled:
@@ -88,9 +89,24 @@ def run_script(
             
         data = grouped_items.get(segment_id, [])
         try:
-            text = segment_impl.script(config, data, provider, config.tts.language, episode_date=episode_date)
+            text = segment_impl.script(
+                config,
+                data,
+                provider,
+                config.tts.language,
+                episode_date=episode_date,
+                prev_segment=prev_segment
+            )
             if text:
-                script_segments.append(ScriptSegment(name=segment_id, text=text))
+                text = text.strip()
+                if prev_segment is not None:
+                    transition = get_segment_transition(segment_id, prev_segment.name, config.tts.language)
+                    if transition:
+                        text = f"{transition} {text}"
+                
+                curr_segment = ScriptSegment(name=segment_id, text=text)
+                script_segments.append(curr_segment)
+                prev_segment = curr_segment
         except Exception:
             logger.exception("Fehler beim Generieren des Skripts für Segment %s. Wird übersprungen.", segment_id)
             
