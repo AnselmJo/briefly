@@ -355,7 +355,7 @@ def check_voices(project_root: Path, config: Any | None) -> CheckResult:
 
 
 def check_web_server(config: Any | None) -> CheckResult:
-    """Prüft die Webserver- und Netzwerk-Einstellungen."""
+    """Prüft die Webserver- und Netzwerk-Einstellungen sowie die Erreichbarkeit."""
     if not config:
         return CheckResult(
             name="Web-Server",
@@ -373,19 +373,39 @@ def check_web_server(config: Any | None) -> CheckResult:
     if "localhost" in config.delivery.base_url or "127.0.0.1" in config.delivery.base_url:
         warnings.append("delivery.base_url zeigt auf localhost (Podcast-Wiedergabe am Handy scheitert)")
         
+    # Reachability check
+    port = config.web.port
+    reachable = False
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.0)
+        s.connect(("127.0.0.1", port))
+        s.close()
+        reachable = True
+    except Exception:
+        pass
+
+    if not reachable:
+        return CheckResult(
+            name="Web-Server",
+            status=False,
+            details=f"Server unter Port {port} nicht erreichbar",
+            fix=f"Starte den Webserver mit: uvicorn briefly.web.app:app --host {config.web.host} --port {port}",
+        )
+        
     if warnings:
         return CheckResult(
             name="Web-Server",
             status=True,
             is_warning=True,
-            details="; ".join(warnings),
+            details="Erreichbar; " + "; ".join(warnings),
             fix=f"Passe config.yaml an. Empfohlene IP für WLAN-Zugriff: http://{local_ip}:{config.web.port}",
         )
         
     return CheckResult(
         name="Web-Server",
         status=True,
-        details=f"Optimal konfiguriert (erreichbar unter http://{local_ip}:{config.web.port})",
+        details=f"Erreichbar und optimal konfiguriert (http://{local_ip}:{config.web.port})",
     )
 
 
@@ -410,6 +430,87 @@ def check_feed_generation() -> CheckResult:
             status=False,
             details=f"Fehler bei FeedGenerator: {e}",
             fix="Installiere feedgen neu: pip install feedgen",
+        )
+
+
+def check_ffmpeg() -> CheckResult:
+    """Prüft, ob ffmpeg installiert und funktionsfähig ist."""
+    import shutil
+    import subprocess
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        cmd = "winget install Gyan.FFmpeg" if sys.platform == "win32" or sys.platform == "cygwin" else "brew install ffmpeg"
+        return CheckResult(
+            name="ffmpeg",
+            status=False,
+            details="ffmpeg nicht im PATH gefunden",
+            fix=f"Installiere ffmpeg: {cmd}",
+        )
+    try:
+        res = subprocess.run([ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0:
+            return CheckResult(
+                name="ffmpeg",
+                status=True,
+                details="ffmpeg installiert und funktionsfähig",
+            )
+        else:
+            return CheckResult(
+                name="ffmpeg",
+                status=False,
+                details=f"ffmpeg lieferte Fehlercode {res.returncode}",
+                fix="Installiere ffmpeg neu.",
+            )
+    except Exception as e:
+        return CheckResult(
+            name="ffmpeg",
+            status=False,
+            details=f"Fehler beim Ausführen von ffmpeg: {e}",
+            fix="Überprüfe deine ffmpeg-Installation.",
+        )
+
+
+def check_feed_xml(config: Any | None) -> CheckResult:
+    """Prüft, ob die Datei feed.xml vorhanden und ein gültiges XML-Dokument ist."""
+    if not config:
+        return CheckResult(
+            name="feed.xml-Validierung",
+            status=False,
+            details="Übersprungen (Konfiguration fehlt)",
+            is_warning=True,
+        )
+    
+    feed_path = config.delivery.output_dir / "feed.xml"
+    if not feed_path.exists():
+        return CheckResult(
+            name="feed.xml-Validierung",
+            status=False,
+            details="feed.xml existiert noch nicht",
+            fix="Erzeuge das erste Briefing mit: briefly run",
+        )
+        
+    try:
+        import xml.etree.ElementTree as ET
+        tree = ET.parse(feed_path)
+        root = tree.getroot()
+        if "feed" not in root.tag and "rss" not in root.tag:
+            return CheckResult(
+                name="feed.xml-Validierung",
+                status=False,
+                details="feed.xml ist kein gültiger RSS/Atom-Feed",
+                fix="Erzeuge die Datei neu mit: briefly run",
+            )
+        return CheckResult(
+            name="feed.xml-Validierung",
+            status=True,
+            details="feed.xml vorhanden und valides XML",
+        )
+    except Exception as e:
+        return CheckResult(
+            name="feed.xml-Validierung",
+            status=False,
+            details=f"Fehler beim XML-Parsen von feed.xml: {e}",
+            fix="Lösche die defekte Datei und erzeuge sie neu mit: briefly run",
         )
 
 
@@ -520,7 +621,13 @@ def run_doctor() -> int:
     # 12. Feed generation
     results.append(check_feed_generation())
     
-    # 13. launchd services
+    # 13. feed.xml validation
+    results.append(check_feed_xml(config))
+    
+    # 14. ffmpeg check
+    results.append(check_ffmpeg())
+    
+    # 15. launchd services
     results.append(check_launchd_services())
     
     # Status-Tabelle ausgeben

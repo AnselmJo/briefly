@@ -7,6 +7,8 @@ from briefly.doctor import (
     CheckResult,
     check_config,
     check_feed_generation,
+    check_feed_xml,
+    check_ffmpeg,
     check_internet,
     check_installed_model,
     check_launchd_services,
@@ -241,15 +243,81 @@ def test_check_web_server_localhost_warning():
     config.web.host = "127.0.0.1"
     config.delivery.base_url = "http://localhost:8787"
     
-    res = check_web_server(config)
-    assert res.status is True
-    assert res.is_warning is True
-    assert "localhost" in res.details
+    with patch("socket.socket") as mock_socket:
+        mock_instance = MagicMock()
+        mock_socket.return_value = mock_instance
+        res = check_web_server(config)
+        assert res.status is True
+        assert res.is_warning is True
+        assert "localhost" in res.details
+
+
+def test_check_web_server_unreachable():
+    from briefly.config import Config
+    config = Config()
+    
+    with patch("socket.socket", side_effect=Exception("Connection refused")):
+        res = check_web_server(config)
+        assert res.status is False
+        assert "nicht erreichbar" in res.details
+        assert "uvicorn" in res.fix
 
 
 def test_check_feed_generation_success():
     res = check_feed_generation()
     assert res.status is True
+
+
+def test_check_ffmpeg_success():
+    with patch("shutil.which", return_value="/usr/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        res = check_ffmpeg()
+        assert res.status is True
+        assert "funktionsfähig" in res.details
+
+
+def test_check_ffmpeg_missing():
+    with patch("shutil.which", return_value=None):
+        res = check_ffmpeg()
+        assert res.status is False
+        assert "nicht im PATH gefunden" in res.details
+
+
+def test_check_feed_xml_missing(tmp_path):
+    from briefly.config import Config
+    config = Config()
+    config.delivery.output_dir = tmp_path / "output"
+    
+    res = check_feed_xml(config)
+    assert res.status is False
+    assert "existiert noch nicht" in res.details
+
+
+def test_check_feed_xml_success(tmp_path):
+    from briefly.config import Config
+    config = Config()
+    config.delivery.output_dir = tmp_path / "output"
+    config.delivery.output_dir.mkdir(parents=True, exist_ok=True)
+    feed_file = config.delivery.output_dir / "feed.xml"
+    feed_file.write_text('<rss version="2.0"><channel><title>Briefly Feed</title></channel></rss>', encoding="utf-8")
+    
+    res = check_feed_xml(config)
+    assert res.status is True
+    assert "valides XML" in res.details
+
+
+def test_check_feed_xml_invalid(tmp_path):
+    from briefly.config import Config
+    config = Config()
+    config.delivery.output_dir = tmp_path / "output"
+    config.delivery.output_dir.mkdir(parents=True, exist_ok=True)
+    feed_file = config.delivery.output_dir / "feed.xml"
+    feed_file.write_text('this is not XML', encoding="utf-8")
+    
+    res = check_feed_xml(config)
+    assert res.status is False
+    assert "Fehler beim XML-Parsen" in res.details
 
 
 def test_check_launchd_services():
@@ -285,6 +353,8 @@ def test_check_launchd_services():
 @patch("briefly.doctor.check_voices", return_value=CheckResult("Voices", True, "OK"))
 @patch("briefly.doctor.check_web_server", return_value=CheckResult("Web", True, "OK"))
 @patch("briefly.doctor.check_feed_generation", return_value=CheckResult("Feed Gen", True, "OK"))
+@patch("briefly.doctor.check_feed_xml", return_value=CheckResult("Feed XML", True, "OK"))
+@patch("briefly.doctor.check_ffmpeg", return_value=CheckResult("FFmpeg", True, "OK"))
 @patch("briefly.doctor.check_launchd_services", return_value=CheckResult("Launchd", True, "OK"))
 @patch("sys.stdout")
 def test_run_doctor_all_success(*args):
