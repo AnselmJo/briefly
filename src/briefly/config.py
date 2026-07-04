@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+import warnings
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Any, get_origin, get_args
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 
 # Default-Ausschluss-Themen laut Briefing §2.5: Krieg/Kriminalität/Katastrophen.
 DEFAULT_EXCLUDE_KEYWORDS = [
@@ -21,9 +23,115 @@ DEFAULT_EXCLUDE_KEYWORDS = [
 DEFAULT_SEGMENT_PROFILE = ["intro", "news", "topics", "outro"]
 
 
-class LanguageConfig(BaseModel):
-    target: str = "en"
+class ConfigValidationError(ValueError):
+    """Custom exception raised when configuration validation fails."""
+    def __init__(self, key: str, invalid_value: Any, msg: str, fix: str):
+        self.key = key
+        self.invalid_value = invalid_value
+        self.msg = msg
+        self.fix = fix
+        super().__init__(
+            f"Invalid configuration key '{key}': '{invalid_value}'\n"
+            f"Error: {msg}\n"
+            f"Suggested fix: {fix}"
+        )
 
+
+def format_pydantic_error(e: ValidationError) -> ConfigValidationError:
+    """Formats a Pydantic ValidationError into a user-friendly ConfigValidationError."""
+    err = e.errors()[0]
+    loc = err.get("loc", [])
+    key = ".".join(str(x) for x in loc)
+    invalid_value = err.get("input")
+    msg = err.get("msg", "Validation failed")
+    
+    if msg.startswith("Value error, "):
+        msg = msg[len("Value error, "):]
+
+    # Custom suggested fixes
+    fix = "Please verify the setting value in config.yaml."
+    
+    if "port" in key:
+        fix = "Set a port number in the range 1-65535 (e.g., 8787)."
+    elif "base_url" in key or "url" in key:
+        fix = "Ensure the URL starts with 'http://' or 'https://' and is valid."
+    elif "host" in key:
+        fix = "Ensure the host string is not empty (e.g., '0.0.0.0' or 'localhost')."
+    elif "length_scale" in key:
+        fix = "Set length_scale to a positive decimal number (e.g., 1.0, 1.2), or leave it empty (null)."
+    elif "pause_ms" in key:
+        fix = "Set the pause to a non-negative integer in milliseconds (e.g., 250)."
+    elif "hour" in key:
+        fix = "Set the hour to an integer between 0 and 23."
+    elif "minute" in key:
+        fix = "Set the minute to an integer between 0 and 59."
+    elif "target_minutes" in key:
+        fix = "Set target_minutes to a positive integer (e.g., 10)."
+    elif "profile" in key:
+        fix = "Define a list of non-empty segment names (e.g. ['intro', 'news', 'topics', 'outro'])."
+    elif err.get("type") == "int_parsing":
+        fix = f"Ensure the value for {key} is a valid integer."
+    elif err.get("type") == "float_parsing":
+        fix = f"Ensure the value for {key} is a valid decimal number."
+    elif err.get("type") == "bool_parsing":
+        fix = f"Ensure the value for {key} is true or false."
+    elif err.get("type") == "missing":
+        fix = f"Define the required key '{key}' in your configuration."
+
+    return ConfigValidationError(key, invalid_value, msg, fix)
+
+
+def check_unknown_keys(data: Any, model_class: type[BaseModel], prefix: str = "") -> list[str]:
+    """Recursively checks for fields in the input data that are not defined on the Pydantic models."""
+    warnings_list = []
+    if not isinstance(data, dict):
+        return warnings_list
+
+    known_fields = model_class.model_fields.keys()
+    for key, value in data.items():
+        full_key = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
+        if key not in known_fields:
+            warnings_list.append(f"Unbekannter Konfigurationsschlüssel: {full_key}")
+            continue
+        
+        field_info = model_class.model_fields[key]
+        annotation = field_info.annotation
+        
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        
+        model_types = []
+        if origin is Literal:
+            pass
+        elif origin is list or annotation is list:
+            if args:
+                item_type = args[0]
+                if isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                    model_types.append(item_type)
+        elif origin is None:
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                model_types.append(annotation)
+        else:
+            for arg in args:
+                if isinstance(arg, type) and issubclass(arg, BaseModel):
+                    model_types.append(arg)
+                elif get_origin(arg) is list:
+                    list_args = get_args(arg)
+                    if list_args and isinstance(list_args[0], type) and issubclass(list_args[0], BaseModel):
+                        model_types.append(list_args[0])
+                        
+        if model_types:
+            target_model = model_types[0]
+            if isinstance(value, dict):
+                warnings_list.extend(check_unknown_keys(value, target_model, full_key))
+            elif isinstance(value, list):
+                for idx, item in enumerate(value):
+                    if isinstance(item, dict):
+                        warnings_list.extend(check_unknown_keys(item, target_model, f"{full_key}[{idx}]"))
+    return warnings_list
+
+
+# --- Child Configuration Models ---
 
 class TopicsConfig(BaseModel):
     include: list[str] = Field(default_factory=list)
@@ -39,6 +147,27 @@ class RssFeedConfig(BaseModel):
     topic: str | None = None
     weight: float = 1.0
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("RSS feed URL must start with http:// or https://")
+        return v
+
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("RSS feed topic cannot be empty if provided")
+        return v
+
+    @field_validator("weight")
+    @classmethod
+    def validate_weight(cls, v: float) -> float:
+        if v < 0.0:
+            raise ValueError("RSS feed weight must be a non-negative float (>= 0.0)")
+        return v
+
 
 class RssSourceConfig(BaseModel):
     feeds: list[RssFeedConfig] = Field(default_factory=list)
@@ -47,11 +176,20 @@ class RssSourceConfig(BaseModel):
 class SourcesConfig(BaseModel):
     inbox: InboxSourceConfig = Field(default_factory=InboxSourceConfig)
     rss: RssSourceConfig = Field(default_factory=RssSourceConfig)
+    topics: TopicsConfig = Field(default_factory=TopicsConfig)
+    exclude_keywords: list[str] = Field(default_factory=lambda: list(DEFAULT_EXCLUDE_KEYWORDS))
 
 
 class LlmConfig(BaseModel):
     provider: Literal["ollama"] = "ollama"
     model: str = "qwen3:8b"
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("llm.model cannot be empty")
+        return v
 
 
 class TtsConfig(BaseModel):
@@ -62,45 +200,278 @@ class TtsConfig(BaseModel):
     length_scale: float | None = None
     sentence_pause_ms: int = 250
     paragraph_pause_ms: int = 600
+    language: str = "en"
 
+    @field_validator("voice_de", "voice_en", "language")
+    @classmethod
+    def validate_non_empty_str(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v
 
-class WebConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8787
+    @field_validator("length_scale")
+    @classmethod
+    def validate_length_scale(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0.0:
+            raise ValueError("tts.length_scale must be greater than 0.0")
+        return v
+
+    @field_validator("sentence_pause_ms", "paragraph_pause_ms")
+    @classmethod
+    def validate_pause(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Pause must be a non-negative integer (>= 0)")
+        return v
 
 
 class DeliveryConfig(BaseModel):
     provider: Literal["local_feed"] = "local_feed"
     output_dir: Path = Path("output")
     base_url: str = "http://localhost:8787"
+    host: str = "0.0.0.0"
+    port: int = 8787
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("delivery.base_url must start with http:// or https://")
+        return v
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("delivery.host cannot be empty")
+        return v
+
+    @field_validator("port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not (1 <= v <= 65535):
+            raise ValueError("delivery.port must be an integer between 1 and 65535")
+        return v
 
 
-class EpisodeConfig(BaseModel):
+class SegmentsConfig(BaseModel):
+    profile: list[str] = Field(default_factory=lambda: list(DEFAULT_SEGMENT_PROFILE))
     target_minutes: int = 10
 
+    @field_validator("profile")
+    @classmethod
+    def validate_profile(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("segments.profile list cannot be empty")
+        for item in v:
+            if not item.strip():
+                raise ValueError("segment names cannot be empty strings")
+        return v
+
+    @field_validator("target_minutes")
+    @classmethod
+    def validate_target_minutes(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("segments.target_minutes must be at least 1")
+        return v
+
+
+class ScheduleConfig(BaseModel):
+    hour: int = 5
+    minute: int = 30
+
+    @field_validator("hour")
+    @classmethod
+    def validate_hour(cls, v: int) -> int:
+        if not (0 <= v <= 23):
+            raise ValueError("schedule.hour must be between 0 and 23")
+        return v
+
+    @field_validator("minute")
+    @classmethod
+    def validate_minute(cls, v: int) -> int:
+        if not (0 <= v <= 59):
+            raise ValueError("schedule.minute must be between 0 and 59")
+        return v
+
+
+# --- Legacy Proxies for Backward Compatibility ---
+
+class LegacyLanguageProxy:
+    def __init__(self, tts_config: TtsConfig):
+        self._tts_config = tts_config
+
+    @property
+    def target(self) -> str:
+        return self._tts_config.language
+
+    @target.setter
+    def target(self, value: str) -> None:
+        self._tts_config.language = value
+
+
+class LegacyWebProxy:
+    def __init__(self, delivery_config: DeliveryConfig):
+        self._delivery_config = delivery_config
+
+    @property
+    def host(self) -> str:
+        return self._delivery_config.host
+
+    @host.setter
+    def host(self, value: str) -> None:
+        self._delivery_config.host = value
+
+    @property
+    def port(self) -> int:
+        return self._delivery_config.port
+
+    @port.setter
+    def port(self, value: int) -> None:
+        self._delivery_config.port = value
+
+
+class LegacyEpisodeProxy:
+    def __init__(self, segments_config: SegmentsConfig):
+        self._segments_config = segments_config
+
+    @property
+    def target_minutes(self) -> int:
+        return self._segments_config.target_minutes
+
+    @target_minutes.setter
+    def target_minutes(self, value: int) -> None:
+        self._segments_config.target_minutes = value
+
+
+# --- Main Configuration Model ---
 
 class Config(BaseModel):
-    language: LanguageConfig = Field(default_factory=LanguageConfig)
-    topics: TopicsConfig = Field(default_factory=TopicsConfig)
-    exclude_keywords: list[str] = Field(default_factory=lambda: list(DEFAULT_EXCLUDE_KEYWORDS))
-    sources: SourcesConfig = Field(default_factory=SourcesConfig)
-    segment_profile: list[str] = Field(default_factory=lambda: list(DEFAULT_SEGMENT_PROFILE))
-    llm: LlmConfig = Field(default_factory=LlmConfig)
-    tts: TtsConfig = Field(default_factory=TtsConfig)
-    web: WebConfig = Field(default_factory=WebConfig)
     delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
-    episode: EpisodeConfig = Field(default_factory=EpisodeConfig)
+    tts: TtsConfig = Field(default_factory=TtsConfig)
+    llm: LlmConfig = Field(default_factory=LlmConfig)
+    sources: SourcesConfig = Field(default_factory=SourcesConfig)
+    segments: SegmentsConfig = Field(default_factory=SegmentsConfig)
+    schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_keys(cls, data: Any) -> Any:
+        """Migrates older configuration schemas/keys to the new grouped configuration schema."""
+        if isinstance(data, dict):
+            # Migrate segment_profile -> segments.profile
+            if "segment_profile" in data:
+                if "segments" not in data or not isinstance(data["segments"], dict):
+                    data["segments"] = {}
+                if "profile" not in data["segments"]:
+                    data["segments"]["profile"] = data.pop("segment_profile")
+            
+            # Migrate episode.target_minutes -> segments.target_minutes
+            if "episode" in data:
+                episode_data = data.pop("episode")
+                if isinstance(episode_data, dict) and "target_minutes" in episode_data:
+                    if "segments" not in data or not isinstance(data["segments"], dict):
+                        data["segments"] = {}
+                    if "target_minutes" not in data["segments"]:
+                        data["segments"]["target_minutes"] = episode_data["target_minutes"]
+                        
+            # Migrate language.target -> tts.language
+            if "language" in data:
+                lang_data = data.pop("language")
+                if isinstance(lang_data, dict) and "target" in lang_data:
+                    if "tts" not in data or not isinstance(data["tts"], dict):
+                        data["tts"] = {}
+                    if "language" not in data["tts"]:
+                        data["tts"]["language"] = lang_data["target"]
+            
+            # Migrate web.host/port -> delivery.host/port
+            if "web" in data:
+                web_data = data.pop("web")
+                if isinstance(web_data, dict):
+                    if "delivery" not in data or not isinstance(data["delivery"], dict):
+                        data["delivery"] = {}
+                    if "host" in web_data and "host" not in data["delivery"]:
+                        data["delivery"]["host"] = web_data["host"]
+                    if "port" in web_data and "port" not in data["delivery"]:
+                        data["delivery"]["port"] = web_data["port"]
+
+            # Migrate topics -> sources.topics
+            if "topics" in data:
+                topics_data = data.pop("topics")
+                if isinstance(topics_data, dict):
+                    if "sources" not in data or not isinstance(data["sources"], dict):
+                        data["sources"] = {}
+                    if "topics" not in data["sources"]:
+                        data["sources"]["topics"] = topics_data
+            
+            # Migrate exclude_keywords -> sources.exclude_keywords
+            if "exclude_keywords" in data:
+                exc_data = data.pop("exclude_keywords")
+                if "sources" not in data or not isinstance(data["sources"], dict):
+                    data["sources"] = {}
+                if "exclude_keywords" not in data["sources"]:
+                    data["sources"]["exclude_keywords"] = exc_data
+                    
+        return data
+
+    @property
+    def language(self) -> LegacyLanguageProxy:
+        return LegacyLanguageProxy(self.tts)
+
+    @property
+    def web(self) -> LegacyWebProxy:
+        return LegacyWebProxy(self.delivery)
+
+    @property
+    def episode(self) -> LegacyEpisodeProxy:
+        return LegacyEpisodeProxy(self.segments)
+
+    @property
+    def topics(self) -> TopicsConfig:
+        return self.sources.topics
+
+    @property
+    def exclude_keywords(self) -> list[str]:
+        return self.sources.exclude_keywords
+
+    @exclude_keywords.setter
+    def exclude_keywords(self, value: list[str]) -> None:
+        self.sources.exclude_keywords = value
+
+    @property
+    def segment_profile(self) -> list[str]:
+        return self.segments.profile
+
+    @segment_profile.setter
+    def segment_profile(self, value: list[str]) -> None:
+        self.segments.profile = value
 
 
 def load_config(path: Path) -> Config:
-    """Liest eine YAML-Konfigurationsdatei ein und validiert sie."""
+    """Liest eine YAML-Konfigurationsdatei ein, validiert sie und warnt bei unbekannten Schlüsseln."""
     with Path(path).open(encoding="utf-8") as config_file:
         raw = yaml.safe_load(config_file) or {}
-    return Config.model_validate(raw)
+    
+    # Migrieren auf eine temporäre Struktur für den Unknown-Keys Check
+    import copy
+    migrated = copy.deepcopy(raw)
+    migrated = Config.migrate_legacy_keys(migrated)
+
+    # Warnung bei unbekannten Schlüsseln
+    warnings_list = check_unknown_keys(migrated, Config)
+    for warning in warnings_list:
+        warnings.warn(warning, UserWarning)
+        # Auch auf stderr ausgeben für CLI-Benutzer
+        print(f"Warnung: {warning}", file=sys.stderr)
+        
+    try:
+        return Config.model_validate(raw)
+    except ValidationError as e:
+        raise format_pydantic_error(e) from e
 
 
 def save_config(config: Config, path: Path) -> None:
-    """Schreibt eine Config zurück nach YAML (z.B. aus der Web-Oberfläche)."""
+    """Schreibt eine Config zurück nach YAML."""
     data = config.model_dump(mode="json")
     with Path(path).open("w", encoding="utf-8") as config_file:
         yaml.safe_dump(data, config_file, sort_keys=False, allow_unicode=True)
+

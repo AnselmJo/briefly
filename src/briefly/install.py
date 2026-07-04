@@ -264,6 +264,10 @@ def run_install(interactive: bool = True) -> int:
                 content_daily = tpl_daily.read_text(encoding="utf-8")
                 content_daily = content_daily.replace("__PYTHON_BIN__", python_bin)
                 content_daily = content_daily.replace("__PROJECT_DIR__", proj_dir_str)
+                hour = config.schedule.hour if config else 5
+                minute = config.schedule.minute if config else 30
+                content_daily = content_daily.replace("<integer>5</integer>", f"<integer>{hour}</integer>")
+                content_daily = content_daily.replace("<integer>30</integer>", f"<integer>{minute}</integer>")
                 dailyrun_plist.write_text(content_daily, encoding="utf-8")
                 
                 # Web-Server bearbeiten

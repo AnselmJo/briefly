@@ -1,63 +1,117 @@
+# ==========================================
 # Beispiel-Konfiguration für Briefly (Daily Cast)
-# Kopieren nach config.yaml und anpassen. Alles, was der Nutzer ändern will,
-# lebt hier – nie im Code (Briefing §2.4). Alle Felder haben sinnvolle
-# Defaults (siehe src/briefly/config.py); diese Datei zeigt sie explizit.
+# ==========================================
+# Kopiere diese Datei nach config.yaml und passe sie an.
+# Alle Einstellungen haben sinnvolle Defaults.
 
-language:
-  target: en # Zielsprache des Sprechtext-Skripts (Standard: Englisch)
-
-topics:
-  include: [] # Interessens-Kategorien, nach denen kuratiert/gewichtet wird (leer = alle)
-  exclude: [] # zusätzliche Themen, die nie vorkommen sollen
-
-# Themen/Stichwörter, die generell nie vorkommen sollen (Briefing §2.5 Default)
-exclude_keywords: [Krieg, Kriminalität, Katastrophe, war, crime, disaster]
-
-sources:
-  inbox:
-    path: data/inbox
-  rss:
-    feeds:
-      - url: "https://www.tagesschau.de/xml/rss2/"
-        topic: news
-        weight: 1.0
-
-# Reihenfolge der Segmente einer Folge; "topics" bündelt Inbox + Wissens-Themen.
-# Ein zukünftiges "birthdays"-Segment kann hier einfach ergänzt werden.
-segment_profile:
-  - intro
-  - news
-  - topics
-  - outro
-
-llm:
-  provider: ollama
-  model: qwen3:8b # Alternative: qwen3:14b (mehr RAM, höhere Qualität)
-
-tts:
-  provider: piper
-  voice_de: de_DE-thorsten-medium
-  voice_en: en_US-lessac-medium
-  # Verzeichnis mit den heruntergeladenen Piper-Stimmen (<name>.onnx + .onnx.json).
-  # Siehe README für den Download-Befehl.
-  voices_dir: data/voices
-  # Geschwindigkeit der Sprachausgabe (Standard: null / 1.0, < 1.0 schneller, > 1.0 langsamer)
-  length_scale: 1.0
-  # Pause in Millisekunden nach Satzenden
-  sentence_pause_ms: 250
-  # Pause in Millisekunden nach Absatzenden
-  paragraph_pause_ms: 600
-
-web:
+# --- DELIVERY ---
+# Einstellungen für die Bereitstellung des Audio-Feeds und des Webservers.
+delivery:
+  # Provider für das Delivery-Target. Aktuell wird nur 'local_feed' unterstützt.
+  provider: local_feed
+  
+  # Verzeichnis, in dem die Audio-Dateien und Feeds gespeichert werden.
+  output_dir: output
+  
+  # Die Basis-URL, unter der die Podcast-Episoden im Netzwerk erreichbar sind.
+  # Für den WLAN-Zugriff auf die IP-Adresse des Macs angepasst (z.B. per `ipconfig getifaddr en0`).
+  base_url: "http://<mac-lan-ip>:8787"
+  
+  # Host-Adresse für den FastAPI Web-Server. '0.0.0.0' macht ihn im lokalen Netz erreichbar.
   host: 0.0.0.0
+  
+  # Port, auf dem der Web-Server lauscht.
   port: 8787
 
-delivery:
-  provider: local_feed
-  output_dir: output
-  # Für Feed/Audio-URLs im Heim-WLAN: die lokale IP des Macs eintragen,
-  # z.B. per `ipconfig getifaddr en0` ermitteln. Siehe README.
-  base_url: "http://<mac-lan-ip>:8787"
+# --- TTS ---
+# Einstellungen für die Piper Text-to-Speech Sprachausgabe.
+tts:
+  # Provider für die Sprachausgabe. Aktuell wird nur 'piper' unterstützt.
+  provider: piper
+  
+  # Piper-Stimme für deutsche Audio-Generierung.
+  voice_de: de_DE-thorsten-medium
+  
+  # Piper-Stimme für englische Audio-Generierung.
+  voice_en: en_US-lessac-medium
+  
+  # Verzeichnis, in dem die heruntergeladenen Piper-Stimmen liegen (.onnx + .onnx.json).
+  voices_dir: data/voices
+  
+  # Geschwindigkeit/Länge der Sprachausgabe (Standard: null / 1.0, < 1.0 schneller, > 1.0 langsamer).
+  length_scale: 1.0
+  
+  # Pause in Millisekunden nach Satzenden.
+  sentence_pause_ms: 250
+  
+  # Pause in Millisekunden nach Absatzenden.
+  paragraph_pause_ms: 600
+  
+  # Zielsprache für das Sprechtext-Skript (Standard: en).
+  language: en
 
-episode:
+# --- LLM ---
+# Einstellungen für das lokale Sprachmodell (Ollama).
+llm:
+  # Provider für das Sprachmodell. Aktuell wird nur 'ollama' unterstützt.
+  provider: ollama
+  
+  # Name des lokal installierten Ollama-Modells (z.B. qwen3:8b, qwen3:14b).
+  model: qwen3:8b
+
+# --- SOURCES ---
+# Konfiguration der Inhaltsquellen (Inbox, RSS Feeds, Filter).
+sources:
+  # Lokale Text-Inbox für Notizen.
+  inbox:
+    # Verzeichnis, in dem Notizen für die Inbox abgelegt werden.
+    path: data/inbox
+  
+  # RSS-Feed-Quellen für News und sonstige Themen.
+  rss:
+    feeds:
+      # URL des RSS-Feeds.
+      - url: "https://www.tagesschau.de/xml/rss2/"
+        # Kategorie des Feeds (z.B. news, tech, science).
+        topic: news
+        # Prioritäts-Gewichtung des Feeds (Standard: 1.0).
+        weight: 1.0
+  
+  # Themenfilter für die Kuratierung.
+  topics:
+    # Nur Artikel mit diesen Themen einbeziehen (leer = alle zulassen).
+    include: []
+    # Artikel mit diesen Themen immer ausschließen.
+    exclude: []
+  
+  # Wörter oder Themen, die im Skript generell nie vorkommen sollen.
+  exclude_keywords:
+    - Krieg
+    - Kriminalität
+    - Katastrophe
+    - war
+    - crime
+    - disaster
+
+# --- SEGMENTS ---
+# Struktur und Reihenfolge der Episodenteile.
+segments:
+  # Reihenfolge der Abschnitte in einer Daily Cast Folge.
+  # Mögliche Segmente: intro, weather, calendar, news, topics, outro, affirmation, fun_fact.
+  profile:
+    - intro
+    - news
+    - topics
+    - outro
+  
+  # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
   target_minutes: 10
+
+# --- SCHEDULE ---
+# Zeitplanung für den täglichen Lauf (macOS launchd Integration).
+schedule:
+  # Stunde des täglichen Starts (0-23).
+  hour: 5
+  
+  # Minute des täglichen Starts (0-59).
+  minute: 30

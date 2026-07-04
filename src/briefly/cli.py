@@ -20,7 +20,7 @@ from datetime import date
 from pathlib import Path
 
 from briefly import pipeline
-from briefly.config import Config, load_config
+from briefly.config import Config, load_config, ConfigValidationError
 from briefly.models import EpisodeManifest
 
 logger = logging.getLogger(__name__)
@@ -163,6 +163,13 @@ def _load_config_or_exit(path: Path) -> Config:
         sys.exit(1)
     try:
         return load_config(path)
+    except ConfigValidationError as e:
+        print(f"Fehler: Ungültige Konfiguration in '{path}':", file=sys.stderr)
+        print(f"  Schlüssel:       {e.key}", file=sys.stderr)
+        print(f"  Ungültiger Wert: {e.invalid_value}", file=sys.stderr)
+        print(f"  Fehlermeldung:   {e.msg}", file=sys.stderr)
+        print(f"  Behebung:        {e.fix}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"Fehler: Konfigurationsdatei '{path}' konnte nicht geladen werden.", file=sys.stderr)
         print("Details:", e, file=sys.stderr)
