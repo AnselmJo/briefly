@@ -93,7 +93,7 @@ def _probe_duration_ms(path: Path) -> int:
 
 
 def _write_concat_list(paths: list[Path], list_path: Path) -> None:
-    lines = [f"file '{path.resolve()}'" for path in paths]
+    lines = [f"file '{path.resolve().as_posix()}'" for path in paths]
     list_path.write_text("\n".join(lines), encoding="utf-8")
 
 

@@ -1,7 +1,7 @@
 import sys
+import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 
 from briefly.doctor import (
     CheckResult,
@@ -21,6 +21,13 @@ from briefly.doctor import (
     color_status,
     run_doctor,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_default_config_path(tmp_path):
+    with patch("briefly.config.get_default_config_path", return_value=tmp_path / "config.yaml"):
+        yield
+
 
 
 def test_color_status_success():

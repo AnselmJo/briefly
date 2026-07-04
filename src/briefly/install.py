@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from briefly import scheduler
+from briefly.config import get_default_config_path
 
 # Globale Liste der benötigten Python-Pakete (Verteilungsschlüssel aus pyproject.toml)
 REQUIRED_PACKAGES = {
@@ -179,11 +180,13 @@ def run_install(interactive: bool = True) -> int:
     missing_deps = check_python_dependencies()
     
     # 3. config.yaml anlegen/laden
-    config_path = project_root / "config.yaml"
+    config_path = get_default_config_path()
     config_created = False
     local_ip = get_local_ip()
     
     if not config_path.exists():
+        # Ensure parent folder of config.yaml exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         example_config_path = project_root / "config" / "config.example.yaml"
         if example_config_path.exists():
             try:
@@ -216,24 +219,25 @@ def run_install(interactive: bool = True) -> int:
 
     # 4. Verzeichnisse anlegen und Schreibrechte prüfen
     write_perms = {}
+    config_dir = config_path.parent
     if config:
         dirs_to_check = {
-            "root": project_root,
-            "inbox": project_root / config.sources.inbox.path,
-            "voices": project_root / config.tts.voices_dir,
-            "output": project_root / config.delivery.output_dir,
-            "episodes": project_root / config.delivery.output_dir / "episodes",
+            "root": config_dir,
+            "inbox": config.sources.inbox.path,
+            "voices": config.tts.voices_dir,
+            "output": config.delivery.output_dir,
+            "episodes": config.delivery.output_dir / "episodes",
         }
         for key, path in dirs_to_check.items():
             write_perms[key] = verify_write_permission(path)
     else:
         # Fallback-Verzeichnisse erstellen/prüfen
         for key, rel_path in [("root", ""), ("inbox", "data/inbox"), ("voices", "data/voices"), ("output", "output"), ("episodes", "output/episodes")]:
-            path = project_root / rel_path
+            path = config_dir / rel_path
             write_perms[key] = verify_write_permission(path)
 
     # 5. Speicherplatz prüfen (mindestens 5 GB erforderlich)
-    disk_space_ok, disk_space_info = check_disk_space(project_root, 5.0)
+    disk_space_ok, disk_space_info = check_disk_space(config_dir, 5.0)
 
     # 6. ffmpeg prüfen und verifizieren
     ffmpeg_bin = shutil.which("ffmpeg")
@@ -261,7 +265,7 @@ def run_install(interactive: bool = True) -> int:
         model_ok = is_model_installed(model_name, models)
 
     # 9. Piper-Stimmen prüfen
-    voices_dir = project_root / (config.tts.voices_dir if config else Path("data/voices"))
+    voices_dir = config.tts.voices_dir if config else config_path.parent / "data" / "voices"
     voice_de = config.tts.voice_de if config else "de_DE-thorsten-medium"
     voice_en = config.tts.voice_en if config else "en_US-lessac-medium"
     
@@ -372,7 +376,11 @@ def run_install(interactive: bool = True) -> int:
             print("- Schreibrechte: Bitte überprüfe die Berechtigungen für folgende Verzeichnisse:")
             for name, perm in write_perms.items():
                 if not perm:
-                    path_str = str((project_root / (config.sources.inbox.path if config and name == "inbox" else config.tts.voices_dir if config and name == "voices" else config.delivery.output_dir if config and name == "output" else config.delivery.output_dir / "episodes" if config and name == "episodes" else Path())).resolve())
+                    if config:
+                        p = (config.sources.inbox.path if name == "inbox" else config.tts.voices_dir if name == "voices" else config.delivery.output_dir if name == "output" else config.delivery.output_dir / "episodes" if name == "episodes" else Path())
+                    else:
+                        p = config_path.parent / ("data/inbox" if name == "inbox" else "data/voices" if name == "voices" else "output" if name == "output" else "output/episodes" if name == "episodes" else "")
+                    path_str = str(p.resolve())
                     print(f"  * {name} ({path_str})")
             if scheduler.is_windows():
                 print("  Behebung: Führe in cmd/Powershell für die betroffenen Pfade aus:")

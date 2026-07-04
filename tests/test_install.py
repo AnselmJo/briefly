@@ -1,6 +1,6 @@
+import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 
 from briefly.install import (
     check_piper_voice,
@@ -13,6 +13,13 @@ from briefly.install import (
     check_disk_space,
     check_port_availability,
 )
+
+@pytest.fixture(autouse=True)
+def mock_default_config_path(tmp_path):
+    project_root = tmp_path / "briefly_project"
+    with patch("briefly.install.get_default_config_path", return_value=project_root / "config.yaml"):
+        yield
+
 
 
 def test_get_local_ip():

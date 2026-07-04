@@ -1,4 +1,3 @@
-from pathlib import Path
 import warnings
 import pytest
 
@@ -80,7 +79,7 @@ schedule:
     assert config.tts.sentence_pause_ms == 100
     assert config.tts.paragraph_pause_ms == 200
     assert config.llm.model == "mymodel"
-    assert config.sources.inbox.path == Path("my_inbox")
+    assert config.sources.inbox.path == (config_path.parent / "my_inbox").resolve()
     assert config.sources.rss.feeds[0].url == "https://feed1.com/rss"
     assert config.sources.rss.feeds[0].weight == 1.5
     assert config.sources.topics.include == ["tag1"]

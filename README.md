@@ -15,9 +15,12 @@ die Audiodateien mit Kapitelmarken, keine eigene App.
 
 ## Voraussetzungen
 
-- macOS auf Apple Silicon, Python 3.12+
-- [Ollama](https://ollama.com) installiert, Modell gezogen: `ollama pull qwen3:8b`
-- `ffmpeg` installiert (z.B. `brew install ffmpeg`)
+- macOS auf Apple Silicon oder Windows, Python 3.12+
+- [Ollama](https://ollama.com) installiert (Modell gezogen: `ollama pull qwen3:8b`)
+  - Windows: [Ollama für Windows](https://ollama.com) herunterladen und ausführen
+- `ffmpeg` installiert
+  - macOS: `brew install ffmpeg`
+  - Windows: `winget install Gyan.FFmpeg` oder über Chocolatey: `choco install ffmpeg`
 - Piper-Stimmen heruntergeladen (siehe unten)
 
 ## Installation und Einrichtung

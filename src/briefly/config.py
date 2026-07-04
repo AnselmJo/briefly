@@ -531,9 +531,33 @@ class Config(BaseModel):
         self.segments.profile = value
 
 
+def get_user_dir() -> Path:
+    """Gibt das plattform-spezifische Benutzer-Datenverzeichnis zurück."""
+    import os
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Briefly"
+    elif sys.platform == "win32" or sys.platform == "cygwin":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "Briefly"
+        return Path.home() / "AppData" / "Roaming" / "Briefly"
+    else:
+        # Fallback für Linux
+        return Path.home() / ".briefly"
+
+
+def get_default_config_path() -> Path:
+    """Gibt den Pfad zur Standard-Konfigurationsdatei zurück (lokal oder im Benutzerverzeichnis)."""
+    local_config = Path("config.yaml")
+    if local_config.exists():
+        return local_config.resolve()
+    return get_user_dir() / "config.yaml"
+
+
 def load_config(path: Path) -> Config:
     """Liest eine YAML-Konfigurationsdatei ein, validiert sie und warnt bei unbekannten Schlüsseln."""
-    with Path(path).open(encoding="utf-8") as config_file:
+    path = Path(path).resolve()
+    with path.open(encoding="utf-8") as config_file:
         raw = yaml.safe_load(config_file) or {}
     
     # Migrieren auf eine temporäre Struktur für den Unknown-Keys Check
@@ -549,9 +573,20 @@ def load_config(path: Path) -> Config:
         print(f"Warnung: {warning}", file=sys.stderr)
         
     try:
-        return Config.model_validate(raw)
+        config = Config.model_validate(raw)
     except ValidationError as e:
         raise format_pydantic_error(e) from e
+
+    # Relative Pfade auflösen relativ zum Ordner der Konfigurationsdatei
+    config_dir = path.parent
+    if not config.sources.inbox.path.is_absolute():
+        config.sources.inbox.path = (config_dir / config.sources.inbox.path).resolve()
+    if not config.tts.voices_dir.is_absolute():
+        config.tts.voices_dir = (config_dir / config.tts.voices_dir).resolve()
+    if not config.delivery.output_dir.is_absolute():
+        config.delivery.output_dir = (config_dir / config.delivery.output_dir).resolve()
+
+    return config
 
 
 def save_config(config: Config, path: Path) -> None:
@@ -565,4 +600,5 @@ def save_config(config: Config, path: Path) -> None:
     data = config.model_dump(mode="json")
     with Path(path).open("w", encoding="utf-8") as config_file:
         yaml.safe_dump(data, config_file, sort_keys=False, allow_unicode=True)
+
 

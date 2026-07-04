@@ -16,10 +16,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from briefly import pipeline
-from briefly.config import Config, RssFeedConfig, load_config, save_config, ConfigValidationError
+from briefly.config import Config, RssFeedConfig, load_config, save_config, ConfigValidationError, get_default_config_path
 
 _APP_DIR = Path(__file__).parent
-_CONFIG_PATH = Path("config.yaml")
+_CONFIG_PATH = get_default_config_path()
 _ALLOWED_EPISODE_SUFFIXES = {".m4b", ".txt", ".json"}
 
 app = FastAPI(title="Briefly")

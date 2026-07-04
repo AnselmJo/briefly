@@ -473,7 +473,8 @@ def check_launchd_services() -> CheckResult:
 
 def run_doctor() -> int:
     """Führt alle Diagnose-Checks aus und gibt die Status-Tabelle aus."""
-    project_root = _get_project_root()
+    from briefly.config import get_default_config_path
+    project_root = get_default_config_path().parent
     
     print("======================================================================")
     print("                      Briefly (Daily Cast) Doctor")

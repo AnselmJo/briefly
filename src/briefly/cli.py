@@ -20,12 +20,12 @@ from datetime import date
 from pathlib import Path
 
 from briefly import pipeline
-from briefly.config import Config, load_config, ConfigValidationError
+from briefly.config import Config, load_config, ConfigValidationError, get_default_config_path
 from briefly.models import EpisodeManifest
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CONFIG_PATH = Path("config.yaml")
+_DEFAULT_CONFIG_PATH = get_default_config_path()
 
 
 def main(argv: list[str] | None = None) -> int:
