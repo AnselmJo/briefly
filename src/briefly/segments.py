@@ -177,6 +177,20 @@ FALLBACK_FUNFACTS_DE = {
     "art": "Die heutige interessante Tatsache: Leonardo da Vinci konnte mit einer Hand schreiben und gleichzeitig mit der anderen zeichnen. Diese seltene Fähigkeit wird als Beidhändigkeit bezeichnet.",
 }
 
+SYSTEM_INSTRUCTIONS = (
+    "ROLE & TONE CONSTRAINTS:\n"
+    "- Act as a professional morning radio host presenting a daily audio briefing.\n"
+    "- Speak in short, punchy sentences. Use natural, engaging, spoken-language formatting.\n"
+    "- Keep the tone warm, clear, and direct. Avoid dry or academic language.\n\n"
+    "CRITICAL CONSTRAINTS (HARD BANS):\n"
+    "- NEVER use Markdown formatting of any kind (no asterisks, bold, italics, hashtags, dashes, etc.).\n"
+    "- NEVER output bullet points, lists, or line-leading symbols.\n"
+    "- NEVER output titles, section headers, or metadata.\n"
+    "- NEVER output meta-commentary (do not say 'Here is your summary', 'This is the news segment', 'I compiled this from sources', or similar commentary).\n"
+    "- NEVER repeat information or phrases.\n"
+    "- Verbalize uncertain facts cleanly (e.g., 'according to one report...', 'it is reported that...', 'unsicherer Quelle zufolge...').\n"
+)
+
 
 def geocode_location(location: str) -> tuple[float, float] | None:
     """Geocodes a location string using Open-Meteo geocoding API with caching."""
@@ -537,63 +551,40 @@ def format_calendar_programmatically(events: list[dict[str, Any]], language: str
 
 def _build_calendar_prompt(events: list[dict[str, Any]], language: str) -> str:
     lines = [
-        "Du bist der Sprecher für 'Briefly', ein persönliches tägliches Audio-Briefing.",
-        "Formuliere die folgenden Kalendereinträge für heute in einen flüssigen, freundlichen, gesprochenen Text um.",
-        "Schreibe ausschließlich den fertigen Sprechtext, ohne jeglichen Begleittext und ohne Einleitung/Überschrift.",
-        "Wichtig: Lies nicht einfach stur Zeiten und Titel vor (kein '10:00 Meeting'), sondern sprich in ganzen Sätzen.",
-        "Beispiele:",
-        "- 'Du hast um 16 Uhr einen Termin beim Kinderarzt Müller.'" if language == "de" else "- 'You have an appointment at pediatrician Müller at 4 pm.'",
-        "- 'Heute hat Lisa Geburtstag.'" if language == "de" else "- 'Today is Lisa's birthday.'",
+        SYSTEM_INSTRUCTIONS,
+        "TASK:",
+        f"Present today's calendar events and birthdays in {language} as a smooth spoken narrative.",
+        "Combine the entries naturally into a radio-host-style schedule. Output ONLY the spoken text, no lists, no headings, no Markdown.",
         "",
-        "Hier sind die heutigen Kalendereinträge:",
+        "TODAY'S EVENTS:"
     ]
     for e in events:
-        time_str = f"um {e['time']}" if e["time"] else "Ganztägig"
-        if language != "de":
-            time_str = f"at {e['time']}" if e["time"] else "All-day"
+        time_str = f"at {e['time']}" if e["time"] else "all-day"
+        if language == "de":
+            time_str = f"um {e['time']}" if e["time"] else "ganztägig"
         lines.append(f"- {e['summary']} ({time_str})")
-
     return "\n".join(lines)
 
 
 def _build_funfact_prompt(topic: str, language: str) -> str:
-    if language == "de":
-        return (
-            "Du bist der Sprecher für 'Briefly', ein persönliches tägliches Audio-Briefing.\n"
-            f"Erzähle eine kurze, interessante und überraschende Tatsache zum Thema '{topic}'.\n"
-            "Wichtig:\n"
-            "- Schreibe ausschließlich den fertigen Sprechtext in 2 bis 4 Sätzen.\n"
-            "- Beginne den Text mit 'Die heutige interessante Tatsache:' oder einer ähnlichen Formulierung.\n"
-            "- Schreibe keinen Begleittext, keine Überschrift, und keine Kommentare.\n"
-            "- Formuliere den Text flüssig und ansprechend für die Audio-Ausgabe."
-        )
-    else:
-        return (
-            "You are the speaker for 'Briefly', a personal daily audio briefing.\n"
-            f"Share a short, interesting, and surprising fact about '{topic}'.\n"
-            "Important:\n"
-            "- Write exactly the spoken text in 2 to 4 sentences.\n"
-            "- Begin the text with 'Today's interesting fact:' or a similar phrase.\n"
-            "- Do not write any metadata, headings, or commentary.\n"
-            "- Make it sound natural and engaging for audio playback."
-        )
+    return (
+        f"{SYSTEM_INSTRUCTIONS}\n"
+        f"TASK:\n"
+        f"Share one short, fascinating, and surprising fact about the topic '{topic}' in {language}.\n"
+        f"Write exactly 2 to 4 sentences designed for natural audio presentation.\n"
+        f"Output ONLY the fact text. Do not include headings, metadata, or comments."
+    )
 
 
 def _build_summarize_prompt(content: str, max_words: int, language: str) -> str:
-    if language == "de":
-        return (
-            "Du bist ein Assistent für ein persönliches tägliches Audio-Briefing.\n"
-            f"Fasse den folgenden Eintrag so zusammen, dass er flüssig gesprochen werden kann und maximal {max_words} Wörter lang ist.\n"
-            "Wichtig: Antworte ausschließlich mit der fertigen Zusammenfassung ohne Einleitung, Begleittext oder Anmerkungen.\n\n"
-            f"Eintrag:\n{content}"
-        )
-    else:
-        return (
-            "You are an assistant for a personal daily audio briefing.\n"
-            f"Summarize the following entry so that it can be read aloud naturally and is at most {max_words} words long.\n"
-            "Important: Output only the summary itself without any introductory or concluding remarks.\n\n"
-            f"Entry:\n{content}"
-        )
+    return (
+        f"{SYSTEM_INSTRUCTIONS}\n"
+        f"TASK:\n"
+        f"Summarize the following inbox entry to be read aloud in {language}.\n"
+        f"Make it flow naturally, and limit the length to at most {max_words} words.\n"
+        f"Output ONLY the summary text, with absolutely no headings, lists, Markdown, or comments.\n\n"
+        f"ENTRY:\n{content}"
+    )
 
 
 def truncate_words(text: str, max_words: int) -> str:
@@ -1024,9 +1015,13 @@ class IntroSegment(BaseSegment):
         language: str,
         episode_date: date | None = None,
     ) -> str:
+        user_name = getattr(config, "user_name", "Anselm")
         prompt = (
-            f"Schreibe ein kurzes, freundliches Intro für das persönliche tägliche Audio-Briefing 'Briefly' auf {language}.\n"
-            "Begrüße den Hörer und stimme ihn kurz auf den Tag ein. Schreibe ausschließlich den Sprechtext ohne jeglichen Begleittext."
+            f"{SYSTEM_INSTRUCTIONS}\n"
+            f"TASK:\n"
+            f"Write a short, friendly introduction for the daily audio briefing 'Briefly' in {language}.\n"
+            f"Greet the listener (their name is '{user_name}') and warmly set a positive mood for the day ahead.\n"
+            f"Output ONLY the spoken text. No intro, no headings, no comments."
         )
         return llm_provider.generate_segment_text(prompt)
 
@@ -1099,8 +1094,11 @@ class OutroSegment(BaseSegment):
         episode_date: date | None = None,
     ) -> str:
         prompt = (
-            f"Schreibe ein kurzes, freundliches Outro für das persönliche tägliche Audio-Briefing 'Briefly' auf {language}.\n"
-            "Verabschiede den Hörer und wünsche ihm einen schönen Tag. Schreibe ausschließlich den Sprechtext ohne jeglichen Begleittext."
+            f"{SYSTEM_INSTRUCTIONS}\n"
+            f"TASK:\n"
+            f"Write a warm, natural outro/ending for the daily audio briefing 'Briefly' in {language}.\n"
+            f"Say goodbye to the listener, wish them a wonderful day, and make the ending flow naturally without a sudden cut.\n"
+            f"Output ONLY the spoken text. No intro, no headings, no comments."
         )
         return llm_provider.generate_segment_text(prompt)
 
@@ -1109,17 +1107,17 @@ def _build_segment_prompt(
     segment_id: str, items: list[Item], language: str, target_minutes: int
 ) -> str:
     lines = [
-        f"Du schreibst den Sprechtext für das Segment '{segment_id}' von 'Briefly', ein persönliches tägliches Audio-Briefing.",
-        f"Schreibe die gesamte Ausgabe konsequent auf {language}, auch wenn das Quellmaterial gemischtsprachig ist.",
-        f"Dieses Segment hat eine Ziel-Sprechzeit im Verhältnis zur Gesamtlänge von ca. {target_minutes} Minuten.",
-        "Schreibe ausschließlich den fertigen Sprechtext für dieses Segment, ohne jegliche Einleitung, ohne Begleittext, und ohne Überschriften.",
+        SYSTEM_INSTRUCTIONS,
+        "TASK:",
+        f"Write the spoken script for the '{segment_id}' segment of Briefly in {language}.",
+        "Synthesize the source material below into a cohesive, flowing narrative. Do not list items or jump abruptly between stories. Use transition words.",
+        f"Target duration is approximately {target_minutes} minutes. Keep it concise.",
+        "Output ONLY the final spoken script. No headings, no lists, no Markdown, no introduction or outro lines.",
         "",
+        "SOURCE MATERIAL:"
     ]
-    if items:
-        lines.append(f"### Quellmaterial für das Segment '{segment_id}':")
-        for item in items[:15]:
-            lines.append(f"- {item.title}: {item.content}")
-        lines.append("")
+    for item in items[:15]:
+        lines.append(f"- {item.title}: {item.content}")
     return "\n".join(lines)
 
 

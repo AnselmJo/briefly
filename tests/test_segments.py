@@ -91,7 +91,7 @@ def test_segment_script_failure_graceful_degradation():
     mock_llm = MagicMock()
     # Mock script generation: intro segment succeeds, news segment raises exception
     def side_effect(prompt):
-        if "news" in prompt:
+        if "'news' segment" in prompt:
             raise RuntimeError("LLM error during news script generation")
         return "Intro script generated successfully"
     mock_llm.generate_segment_text.side_effect = side_effect
