@@ -1,3 +1,5 @@
+cd /Users/aj/projekte/briefly
+cat > AGENTS.md << 'EOF'
 # AGENTS.md — Briefly
 
 Solo vibe-coding project by one developer, no reviewers, no other users.
@@ -5,6 +7,15 @@ Personal morning-assistant podcast tool ("Daily Cast"), runs fully local
 on macOS (Windows support planned). Segment-based episodes: greeting,
 weather, calendar, news, inbox/book notes, affirmation, fun fact.
 Architecture uses a provider abstraction for LLM (Ollama) and TTS (Piper).
+
+## Project map (avoid re-discovering this every session)
+- Config system: src/briefly/config.py (Pydantic models + load_config/save_config)
+- Config template: config/config.example.yaml
+- CLI entrypoint + error handling: src/briefly/cli.py (_load_config_or_exit)
+- Web app: src/briefly/web/app.py
+- Tests mirror src/ 1:1 in tests/
+- Run only the relevant test file while iterating: `.venv/bin/pytest tests/test_config.py`
+  Run the full suite only once, right before committing.
 
 ## Autonomy — you have full permission
 - You are fully authorized to create, edit, and delete files, run any
@@ -68,3 +79,8 @@ Architecture uses a provider abstraction for LLM (Ollama) and TTS (Piper).
   even when a direct shortcut would be faster
 - Graceful degradation: a failing segment or source must never break
   episode generation
+EOF
+
+git add AGENTS.md
+git commit -m "chore: update AGENTS.md with autonomy and git sync rules"
+git push origin main
