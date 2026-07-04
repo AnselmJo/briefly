@@ -1,202 +1,271 @@
-# Briefly
+# Briefly 🎙️
 
 ![Briefly Web-Dashboard](docs/screenshots/dashboard.jpg)
 
-Persönliches tägliches Audio-Briefing ("Daily Cast"): eine automatisch
-generierte, ~10-minütige Sprachfolge aus News, Wissens-Themen und eigenen
-Inbox-Einträgen (Notizen, Buchzusammenfassungen, Links), ausgeliefert als
-abonnierbarer RSS-Feed. Läuft komplett lokal auf einem Mac (Apple Silicon).
+**Briefly** ist dein persönliches, tägliches Audio-Briefing („Daily Cast“). Jeden Morgen generiert Briefly vollautomatisch eine ca. 10-minütige Podcast-Folge, maßgeschneidert aus deinen Kalendern, Wettervorhersagen, Lieblings-RSS-Feeds (Nachrichten) und deinen persönlichen Notizen.
 
-> „Briefly – deine Themen, kurz und persönlich gesprochen, jeden Morgen."
+Briefly läuft **vollkommen lokal und privat** auf deinem Computer (macOS oder Windows) – keine Daten verlassen deinen Rechner. Die fertige Folge abonnierst du einfach mit deiner bevorzugten Podcast-App auf dem Smartphone.
 
-Eingaben/Einstellungen erfolgen über eine Web-Oberfläche, die im Heim-WLAN
-von macOS, iOS, Windows und Android aus per Browser erreichbar ist. Die
-Wiedergabe (bevorzugt Android) erfolgt über eine bestehende Podcast-App wie
-[AntennaPod](https://antennapod.org/) – Briefly liefert nur den RSS-Feed und
-die Audiodateien mit Kapitelmarken, keine eigene App.
+---
 
-## Voraussetzungen
+## 🚀 Erste Folge in 5 Minuten (Schnellstart)
 
-- macOS auf Apple Silicon oder Windows, Python 3.12+
-- [Ollama](https://ollama.com) installiert (Modell gezogen: `ollama pull qwen3:8b`)
-  - Windows: [Ollama für Windows](https://ollama.com) herunterladen und ausführen
-- `ffmpeg` installiert
-  - macOS: `brew install ffmpeg`
-  - Windows: `winget install Gyan.FFmpeg` oder über Chocolatey: `choco install ffmpeg`
-- Piper-Stimmen heruntergeladen (siehe unten)
+Sobald Briefly installiert ist, kannst du sofort loslegen:
 
-## Installation und Einrichtung
+1. **Web-Oberfläche starten:** Öffne ein Terminal- oder PowerShell-Fenster im Briefly-Ordner und tippe ein:
+   ```bash
+   briefly start
+   ```
+2. **Dashboard öffnen:** Öffne deinen Internet-Browser und rufe auf: [http://localhost:8787](http://localhost:8787).
+3. **Folge erzeugen:** Klicke auf den großen Button **„Neue Folge erzeugen“**. Die Statusanzeige springt auf ⏳ *„Neue Folge wird gerade erzeugt...“*.
+4. **Anhören:** Nach ca. 2 bis 3 Minuten aktualisiert sich die Seite. Du siehst die fertige Folge des Tages, kannst sie direkt im Browser abspielen oder als M4B-Audiodatei herunterladen.
 
-Um Briefly einzurichten, führe die folgenden Schritte aus. Der integrierte Setup-Assistent führt dich durch die Diagnose und konfiguriert alle Pfade, Verzeichnisse und optionalen launchd-Hintergrunddienste automatisch.
+---
 
-1. **Virtuelle Umgebung erstellen und Abhängigkeiten installieren:**
+## 📥 Installation
 
+Wähle die passende Anleitung für dein Betriebssystem aus:
+
+<details>
+<summary><b>💻 Installation auf macOS (Apple Silicon & Intel Macs)</b></summary>
+
+### Schritt 1: Programme & Werkzeuge installieren
+Du brauchst ein Paket-Verwaltungsprogramm namens **Homebrew**, um Python, FFmpeg (für Audio) und Ollama (für die KI) zu installieren.
+
+1. Drücke `Cmd + Leertaste`, tippe **Terminal** ein und öffne die Terminal-App.
+2. Kopiere folgenden Befehl, füge ihn im Terminal ein und drücke `Enter` (folge den Anweisungen auf dem Bildschirm):
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+3. Installiere anschließend die benötigten Programme mit diesem Befehl:
+   ```bash
+   brew install python ffmpeg ollama git
+   ```
+
+### Schritt 2: Ollama starten & KI-Modell herunterladen
+1. Öffne **Ollama** über deine macOS Spotlight-Suche (`Cmd + Leertaste` -> Ollama). Ein kleines Lama-Symbol erscheint oben rechts in deiner Menüleiste.
+2. Lade das KI-Sprachmodell herunter, indem du folgenden Befehl im Terminal ausführst:
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+
+### Schritt 3: Briefly herunterladen & einrichten
+1. Kopiere das Briefly-Repository auf deinen Mac:
+   ```bash
+   git clone https://github.com/AnselmJo/briefly.git
+   ```
+2. Navigiere in den Briefly-Ordner:
+   ```bash
+   cd briefly
+   ```
+3. Erstelle eine isolierte Python-Umgebung und aktiviere sie:
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   pip install -e ".[dev]"
    ```
-
-2. **Setup-Assistent ausführen:**
-
+4. Installiere Briefly und starte den automatischen Einrichtungs-Assistenten:
    ```bash
+   pip install -e .
    briefly install
    ```
+   *Folge den Anweisungen des Assistenten, um die deutschen Sprechstimmen herunterzuladen und den täglichen Hintergrund-Dienst einzurichten.*
 
-   Der Assistent prüft:
-   - Fehlende Python-Abhängigkeiten
-   - Ollama-Installation und den Status des Hintergrunddienstes
-   - Vorhandensein des LLM-Modells (Default: `qwen3:8b`)
-   - Download-Status der Piper-Stimmen (DE + EN)
-   - Vorhandensein von `ffmpeg`
-   - Schreibrechte in den Arbeitsverzeichnissen
+</details>
 
-   Er führt außerdem folgende Schritte automatisch durch:
-   - Erstellt `config.yaml` aus dem Template (und trägt automatisch die lokale IP-Adresse deines Macs für `delivery.base_url` ein)
-   - Erstellt alle benötigten Arbeits- und Ausgabeordner
-   - Generiert die `launchd`-Konfigurationsdateien für macOS in `output/`
-   - Frägt, ob die macOS `launchd`-Dienste installiert werden sollen (für den täglichen nächtlichen Lauf um 05:30 Uhr und den Webserver im Hintergrund)
+<details>
+<summary><b>🔌 Installation auf Windows 10 / 11</b></summary>
 
-3. **Fehlende Komponenten herunterladen (falls vom Assistenten gemeldet):**
+### Schritt 1: Systemprogramme installieren
+Unter Windows nutzen wir den eingebauten Paketmanager `winget`, um alles Notwendige mit einem Rutsch zu installieren.
 
-   - **Ollama Modell:**
-     ```bash
-     ollama pull qwen3:8b
-     ```
-   - **Piper-Stimmen:**
-     ```bash
-     python -m piper.download_voices de_DE-thorsten-medium --data-dir data/voices
-     python -m piper.download_voices en_US-lessac-medium --data-dir data/voices
-     ```
+1. Drücke die `Windows-Taste`, tippe **PowerShell** ein, mache einen Rechtsklick auf *Windows PowerShell* und wähle **Als Administrator ausführen**.
+2. Kopiere diesen Befehl in das PowerShell-Fenster und drücke `Enter`:
+   ```powershell
+   winget install Python.Python.3.12 Gyan.FFmpeg Ollama.Ollama Git.Git
+   ```
+3. **Wichtig:** Schließe das PowerShell-Fenster und öffne ein neues (ohne Administratorrechte), damit die neuen Befehle erkannt werden.
 
+### Schritt 2: Ollama starten & KI-Modell herunterladen
+1. Starte **Ollama** über dein Windows-Startmenü. Unten rechts in der Taskleiste siehst du nun das Lama-Symbol.
+2. Lade das Standard-Sprachmodell im PowerShell-Fenster herunter:
+   ```powershell
+   ollama pull qwen2.5:7b
+   ```
 
-## Nutzung
+### Schritt 3: Briefly herunterladen & einrichten
+1. Lade Briefly auf deinen PC herunter:
+   ```powershell
+   git clone https://github.com/AnselmJo/briefly.git
+   ```
+2. Navigiere in den Ordner:
+   ```powershell
+   cd briefly
+   ```
+3. Erstelle eine Python-Umgebung und aktiviere sie:
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   ```
+4. Installiere Briefly und führe die automatische Einrichtung aus:
+   ```powershell
+   pip install -e .
+   briefly install
+   ```
+   *Der Assistent lädt nun die nötigen deutschen Stimmen herunter und bereitet deine `config.yaml` Konfigurationsdatei vor.*
 
-Pipeline manuell einmal komplett durchlaufen lassen:
+</details>
 
-```bash
-briefly run
-```
+---
 
-Einzelne Stufen (Briefing §2.7 – jede Stufe separat testbar):
+## 📱 Verbindung mit dem Smartphone (z. B. AntennaPod)
 
-```bash
-briefly collect
-briefly curate
-briefly script
-briefly audio
-briefly deliver
-```
+Du kannst Briefly auf deinem iPhone oder Android-Handy abonnieren, solange sich das Handy im selben WLAN wie dein Computer befindet.
 
-### System-Diagnose
+1. **Server starten:** Stelle sicher, dass Briefly im Hintergrund läuft (`briefly start` ausgeführt auf dem Mac/PC).
+2. **RSS-Link kopieren:** Klicke auf dem Web-Dashboard (`http://localhost:8787`) im Abschnitt *„Podcast abonnieren“* auf **Kopieren**.
+3. **In Podcast-App eintragen:**
+   - Öffne eine Podcast-App (wir empfehlen die kostenfreie App **AntennaPod** für Android oder **Apple Podcasts** / **Overcast** für iOS).
+   - Wähle *„Podcast per RSS-Feed/URL hinzufügen“*.
+   - Füge die kopierte Adresse ein (z. B. `http://192.168.178.20:8787/feed.xml`) und klicke auf Abonnieren.
+4. **Hören:** Deine neu generierten Episoden erscheinen automatisch in deiner App inklusive passender Kapitelmarken.
 
-Um den Zustand deines Systems und der konfigurierten Dienste zu prüfen, steht das Diagnose-Tool `briefly doctor` bereit. Es führt automatische Tests für alle benötigten Systemressourcen, Verbindungen, Modelle, Stimmen und Dienste durch und gibt Empfehlungen zur Fehlerbehebung:
+---
 
+## 🧩 Die Abschnitte (Segments) erklärt
+
+Briefly stellt deine Episoden modular aus folgenden Abschnitten zusammen. Du kannst jeden Abschnitt im Web-Interface unter **Segments** ein- oder ausschalten und verschieben:
+
+*   **Begrüßung & Datum (Greeting):** Begrüßt dich namentlich, nennt das aktuelle Datum und den Wochentag.
+*   **Einleitung & Stimmung (Intro):** Ein kurzer, motivierender Spruch, um positiv in den Tag zu starten.
+*   **Wetterbericht (Weather):** Ruft die aktuelle Vorhersage für deinen konfigurierten Standort ab.
+*   **Kalender (Calendar):** Listet deine heutigen Termine und Geburtstage auf (integrierbar mit Google Kalender, iCloud und Outlook über ICS-Links).
+*   **Hauptnachrichten (News):** Liest die wichtigsten Meldungen aus deinen konfigurierten RSS-Nachrichtenquellen vor.
+*   **Weitere Themen (Topics):** Weitere Artikel aus Technik, Sport oder Wissenschaft.
+*   **Persönliche Notizen (Inbox):** Liest deine Notizen oder Buchzusammenfassungen vor, die du im Tab *Sources* eingetragen hast.
+*   **Tägliche Affirmation (Affirmation):** Ein positiver Glaubenssatz für deinen Tag.
+*   **Interessanter Fakt (Fun Fact):** Ein kurzer, überraschender Wissensfakt zum Schmunzeln.
+*   **Verabschiedung (Outro):** Ein netter Abschiedsgruß, der dynamisch Bezug auf das Wetter oder anstehende Termine nimmt.
+
+---
+
+## ⚙️ Aktualisierung & Wartung
+
+Wenn eine neue Version von Briefly erscheint, kannst du diese ganz leicht aktualisieren:
+
+1. Öffne dein Terminal- oder PowerShell-Fenster im Briefly-Ordner.
+2. Führe diese Befehle nacheinander aus:
+   ```bash
+   git pull origin main
+   pip install -e .
+   ```
+3. Starte danach deinen Webserver mit `briefly restart` neu.
+
+---
+
+## 🛠️ Fehlerbehebung (Troubleshooting)
+
+Falls etwas mal nicht funktioniert, nutze das eingebaute Diagnose-Tool. Es überprüft alle Dienste, Stimmen und Pfade auf Fehler:
 ```bash
 briefly doctor
 ```
 
-### Konfiguration und Sprachqualität-Optimierung (TTS)
+Hier sind die häufigsten 10 Probleme und wie du sie löst:
 
-Briefly enthält eine integrierte Text-Bereinigung (Preprocessing) vor der Sprachausgabe durch Piper. Diese entfernt automatisch störende Formatierungen wie Markdown (Auszeichnungen, Links, Überschriften, Listenpunkte), HTML-Tags, Code-Blöcke, Tabellen und Emojis, normalisiert die Interpunktion (z.B. Anführungszeichen, Bindestriche, mehrfache Satzzeichen) und Leerzeichen, und expandiert sprachspezifisch gängige Abkürzungen (z.B. "z.B." zu "zum Beispiel" im Deutschen, "e.g." zu "for example" im Englischen) für eine flüssige Audio-Ausgabe.
+<details>
+<summary><b>1. Fehler: "Befehl nicht gefunden" (Command not found)</b></summary>
+Deine virtuelle Python-Umgebung ist nicht aktiv. Führe im Briefly-Ordner aus:
+- **macOS:** `source .venv/bin/activate`
+- **Windows:** `.venv\Scripts\Activate.ps1`
+</details>
 
-Zusätzlich können über die Web-Oberfläche (unter Einstellungen) oder direkt in der `config.yaml` folgende Werte konfiguriert werden, um die Sprachqualität und den Lesefluss zu optimieren:
+<details>
+<summary><b>2. Die Audio-Generierung bleibt bei 0% hängen oder bricht ab</b></summary>
+Stelle sicher, dass **Ollama** im Hintergrund gestartet ist und das Sprachmodell geladen wurde. Teste es, indem du `ollama run qwen2.5:7b` im Terminal ausführst und prüfst, ob du eine Antwort erhältst.
+</details>
 
-```yaml
-tts:
-  # Sprechgeschwindigkeit (Standard: null oder 1.0; < 1.0 ist schneller, > 1.0 langsamer)
-  length_scale: 1.0
-  # Zusätzliche Pause in Millisekunden nach Satzenden (z.B. 250)
-  sentence_pause_ms: 250
-  # Zusätzliche Pause in Millisekunden nach Absatzenden (z.B. 600)
-  paragraph_pause_ms: 600
-```
+<details>
+<summary><b>3. Die Web-Oberfläche ist auf dem Handy nicht erreichbar</b></summary>
+Dein Handy und dein Rechner müssen sich im selben WLAN befinden. Vergewissere dich außerdem, dass keine Firewall auf deinem Computer den Port `8787` blockiert. Die korrekte lokale IP-Adresse wird dir im Web-Dashboard angezeigt.
+</details>
 
+<details>
+<summary><b>4. Fehler: "Not a valid RSS/Atom feed" im Tab "Sources"</b></summary>
+Die eingegebene URL ist kein echter News-Feed, sondern eine normale Website. Suche auf der Website nach einem RSS-Symbol oder einer URL, die auf `.xml`, `.rss` oder `/feed` endet.
+</details>
 
-Web-Oberfläche im Hintergrund starten (Eingaben/Einstellungen + Feed-Auslieferung):
-
+<details>
+<summary><b>5. Fehlende Stimme: "Piper voice not found"</b></summary>
+Der Einrichtungsassistent konnte die Stimmen nicht laden. Führe diesen Befehl aus, um die deutsche Stimme manuell herunterzuladen:
 ```bash
-briefly start
+python -m piper.download_voices de_DE-thorsten-medium --data-dir data/voices
+```
+</details>
+
+<details>
+<summary><b>6. Kalender-Termine werden nicht vorgelesen</b></summary>
+Prüfe die ICS-Link-URL in deiner `config.yaml`. Der Link muss öffentlich zugänglich sein (z. B. der iCal-Privatlink von Google Kalender) und direkt auf eine Datei verweisen, die mit `.ics` endet.
+</details>
+
+<details>
+<summary><b>7. Die Audiowiedergabe knackt oder klingt abgehackt</b></summary>
+Öffne die Einstellungen (Settings) in Briefly und passe das Sprechtempo (`length_scale` auf `1.05` oder `1.1`) sowie die Satzpausen (`sentence_pause_ms` auf `300`) an, um der Stimme mehr Natürlichkeit zu verleihen.
+</details>
+
+<details>
+<summary><b>8. ffmpeg Fehler: "ffmpeg not installed"</b></summary>
+FFmpeg wird benötigt, um die Audiodateien zusammenzufügen. Installiere es:
+- **macOS:** `brew install ffmpeg`
+- **Windows:** Öffne PowerShell als Admin und tippe `winget install Gyan.FFmpeg`.
+</details>
+
+<details>
+<summary><b>9. Windows-Skriptausführung blockiert (Execution Policy)</b></summary>
+Windows blockiert standardmäßig das Ausführen von Aktivierungsskripten. Löse dies in PowerShell mit:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+</details>
+
+<details>
+<summary><b>10. Änderungen in der Web-Oberfläche werden nicht übernommen</b></summary>
+Möglicherweise hat der Webserver keine Schreibrechte im Briefly-Ordner. Stelle sicher, dass du Lese- und Schreibrechte besitzt und starte den Server mit `briefly restart` neu.
+</details>
+
+---
+
+## ❓ Häufig gestellte Fragen (FAQ)
+
+<details>
+<summary><b>Kostet Briefly Geld oder benötigt es Internetabos?</b></summary>
+Nein. Briefly ist komplett kostenlos. Die gesamte Textgenerierung (Ollama) und die Sprachausgabe (Piper) laufen zu 100% lokal auf deiner eigenen Hardware. Internet wird nur benötigt, um deine Wetterdaten, Kalender-Feeds und RSS-Nachrichten abzurufen.
+</details>
+
+<details>
+<summary><b>Wie kann ich Briefly jeden Morgen vollautomatisch laufen lassen?</b></summary>
+Der Einrichtungsassistent (`briefly install`) frägt dich am Ende, ob die macOS `launchd`-Dienste eingerichtet werden sollen. Unter Windows kannst du Briefly über die *Windows-Aufgabenplanung* (Task Scheduler) so konfigurieren, dass nachts ein Skript mit `briefly run` ausgeführt wird.
+</details>
+
+<details>
+<summary><b>Welche Stimmen stehen zur Verfügung?</b></summary>
+Briefly nutzt Piper, das hunderte extrem performante Stimmen unterstützt. Standardmäßig lädt Briefly die Stimme `de_DE-thorsten-medium` herunter, die sehr flüssiges Deutsch spricht. Du kannst in den Einstellungen auch eine englische Stimme konfigurieren.
+</details>
+
+---
+
+## 🏗️ System-Architektur (Für Neugierige)
+
+Briefly arbeitet in einer fünfstufigen Pipeline:
+
+```mermaid
+graph TD
+    A[1. Collect: Daten holen] --> B[2. Curate: Sortieren & Filtern]
+    B --> C[3. Script: Text schreiben mit Ollama]
+    C --> D[4. Audio: Vertonen mit Piper & FFmpeg]
+    D --> E[5. Deliver: RSS-Feed aktualisieren]
 ```
 
-Du kannst den Dienst steuern und überprüfen mit:
-- `briefly stop` (stoppt den Webserver)
-- `briefly status` (zeigt den aktuellen System- und Server-Status)
-- `briefly restart` (startet den Webserver neu)
-
-Danach von einem beliebigen Gerät im selben Heim-WLAN
-`http://<mac-lan-ip>:8787` öffnen.
-
-## Automatischer nächtlicher Lauf (launchd + pmset)
-
-1. Mac so einstellen, dass er nachts aufwacht:
-
-   ```bash
-   sudo pmset repeat wakeorpoweron MTWRFSU 05:25:00
-   ```
-
-2. Platzhalter in den `scripts/launchd/*.plist`-Dateien ersetzen
-   (`__PROJECT_DIR__` = absoluter Projektpfad, `__PYTHON_BIN__` = Pfad zum
-   venv-Python, z.B. `which python` nach `source .venv/bin/activate`).
-
-3. Installieren:
-
-   ```bash
-   cp scripts/launchd/com.briefly.dailyrun.plist ~/Library/LaunchAgents/
-   cp scripts/launchd/com.briefly.web.plist ~/Library/LaunchAgents/
-   launchctl load ~/Library/LaunchAgents/com.briefly.dailyrun.plist
-   launchctl load ~/Library/LaunchAgents/com.briefly.web.plist
-   ```
-
-Der Web-Server (`com.briefly.web`) läuft danach dauerhaft im Hintergrund und
-ist im Heim-WLAN erreichbar; der nächtliche Lauf (`com.briefly.dailyrun`)
-erzeugt jeden Morgen automatisch eine neue Episode.
-
-## Wiedergabe auf Android Smartphone (AntennaPod)
-
-1. [AntennaPod](https://antennapod.org/) installieren (F-Droid oder Play Store).
-2. Im selben Heim-WLAN wie der Mac: Feed abonnieren unter
-   `http://<mac-lan-ip>:8787/feed.xml`.
-3. Neue Episoden erscheinen automatisch nach jedem nächtlichen Lauf, inkl.
-   Kapitelmarken zum Springen zwischen Segmenten.
-
-## Kalender-Integration (ICS Feeds)
-
-Das `calendar`-Segment liest Termine und Geburtstage aus ICS-Feeds oder lokalen `.ics`-Dateien aus. Du kannst ICS-Feed-URLs von den gängigsten Kalender-Diensten erhalten:
-
-### 1. Google Calendar
-1. Öffne [Google Calendar](https://calendar.google.com/) im Web.
-2. Gehe zu **Einstellungen** (Zahnrad-Symbol oben rechts) > **Einstellungen**.
-3. Wähle in der linken Leiste deinen Kalender unter **Einstellungen für meine Kalender** aus.
-4. Scrolle ganz nach unten zum Bereich **Kalender integrieren**.
-5. Kopiere die URL aus dem Feld **Privatadresse im iCal-Format** (endet auf `.ics`).
-   * *Hinweis: Verwende nicht die öffentliche Adresse, außer dein Kalender ist komplett öffentlich freigegeben.*
-
-### 2. Outlook.com / Microsoft 365
-1. Öffne Outlook im Web.
-2. Gehe zu **Einstellungen** (Zahnrad-Symbol oben rechts) > **Kalender** > **Geteilte Kalender** (oder **Kalender veröffentlichen**).
-3. Wähle unter **Kalender veröffentlichen** den gewünschten Kalender und die Berechtigung (z. B. "Kann alle Details sehen") aus.
-4. Klicke auf **Veröffentlichen**.
-5. Kopiere die generierte **ICS-Link-URL**.
-
-### 3. Apple iCloud Calendar
-1. Öffne die Kalender-App auf macOS/iOS oder gehe zu [iCloud.com](https://www.icloud.com/).
-2. Klicke neben dem Namen des Kalenders auf das **Teilen-Symbol** (Funkwellen-Symbol).
-3. Aktiviere **Öffentlicher Kalender**.
-4. Kopiere die bereitgestellte Webcal-URL und ändere das Protokoll am Anfang von `webcal://` zu `https://`.
-
-## Tests
-
-```bash
-pytest
-```
-
-Läuft auch ohne installiertes Ollama/Piper grün (Provider werden in den
-Pipeline-Tests durch Test-Doubles ersetzt). `test_audio.py` überspringt sich
-selbst, wenn `ffmpeg` nicht verfügbar ist.
-
-## Architektur
-
-Siehe [`CLAUDE.md`](./CLAUDE.md) für die Provider-Abstraktion und
-Code-Stil-Regeln, sowie [`docs/concept/`](./docs/concept/) für die
-ursprünglichen Konzeptdokumente (Briefing, Setup-Empfehlungen, Branding).
+1. **Sammeln (Collect):** Holt RSS-Einträge, ICS-Kalendertermine und Inbox-Notizen ab.
+2. **Kuratieren (Curate):** Entfernt Duplikate, sortiert Beiträge nach Wichtigkeit und passt die Auswahl an dein Zeitbudget an.
+3. **Skript (Script):** Ein lokales LLM (z. B. Qwen) formuliert aus den nackten Rohdaten ein natürlich fließendes Radio-Skript mit geschmeidigen Überleitungen.
+4. **Audio (Audio):** Der TTS-Synthesizer Piper wandelt das fertige Skript satzweise in Sprache um. FFmpeg fügt diese zu einer M4B-Hörbuchdatei inklusive Kapitelmarken zusammen.
+5. **Ausliefern (Deliver):** Der lokale Webserver aktualisiert die Podcast-XML-Datei, sodass dein Smartphone die neue Folge sofort herunterladen kann.
