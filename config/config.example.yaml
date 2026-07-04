@@ -119,6 +119,16 @@ weather:
   # latitude: 52.5243
   # longitude: 13.4105
 
+# --- CALENDAR ---
+# Kalender-Konfiguration (ICS Feeds und lokale .ics Dateien).
+calendar:
+  # Liste von ICS-Kalendern (z.B. Google/Outlook/Apple Feeds oder lokale .ics-Dateien)
+  feeds: []
+  # Beispiel für einen Eintrag in feeds:
+  #   - url: "https://calendar.google.com/calendar/ical/.../public/basic.ics"
+  #     include: []
+  #     exclude: ["Privat"]
+
 # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
 target_minutes: 10
 

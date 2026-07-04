@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -275,3 +276,94 @@ def test_weather_script_de():
     
     res = segment.script(config, mock_data, None, "de")
     assert res == "Das Wetter in Berlin: Aktuell sind es 18 Grad und es ist bedeckt. Heute werden Höchstwerte von 22 Grad und Tiefstwerte von 14 Grad erwartet. Die Regenwahrscheinlichkeit liegt bei 40 Prozent bei mäßigem Wind."
+
+
+def test_calendar_collect_and_parse(monkeypatch, tmp_path):
+    monkeypatch.setattr("briefly.segments.get_user_dir", lambda: tmp_path)
+    
+    config = Config()
+    ics_path = Path(__file__).parent / "fixtures" / "test_calendar.ics"
+    
+    from briefly.config import CalendarFeedConfig
+    config.calendar.feeds = [
+        CalendarFeedConfig(url=str(ics_path), include=[], exclude=["excludable"])
+    ]
+    
+    segment = get_segment_impl("calendar")
+    data = segment.collect(config)
+    
+    assert data is not None
+    assert len(data) == 5
+    
+    d = date(2026, 7, 5)
+    
+    res_de = segment.script(config, data, None, "de", episode_date=d)
+    assert "Heute hat Lisa Geburtstag." in res_de
+    assert "Meeting with Anselm" in res_de
+    assert "Excludable appointment" not in res_de
+    assert "Includable task" in res_de
+    
+    res_en = segment.script(config, data, None, "en", episode_date=d)
+    assert "Today is Lisa's birthday." in res_en
+    assert "Meeting with Anselm" in res_en
+    assert "Excludable appointment" not in res_en
+
+
+@patch("httpx.get")
+def test_calendar_remote_fetch_and_cache(mock_get, tmp_path, monkeypatch):
+    monkeypatch.setattr("briefly.segments.get_user_dir", lambda: tmp_path)
+    
+    config = Config()
+    from briefly.config import CalendarFeedConfig
+    config.calendar.feeds = [
+        CalendarFeedConfig(url="https://remote.com/my_events.ics")
+    ]
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Remote Event\nDTSTART:20260705T120000Z\nEND:VEVENT\nEND:VCALENDAR"
+    mock_get.return_value = mock_resp
+    
+    segment = get_segment_impl("calendar")
+    data = segment.collect(config)
+    
+    assert data is not None
+    assert len(data) == 1
+    assert data[0]["event"]["SUMMARY"]["value"] == "Remote Event"
+    
+    import hashlib
+    url_hash = hashlib.md5("https://remote.com/my_events.ics".encode("utf-8")).hexdigest()
+    cache_file = tmp_path / "calendar_cache" / f"{url_hash}.ics"
+    assert cache_file.exists()
+    
+    mock_get.reset_mock()
+    data_cached = segment.collect(config)
+    assert len(data_cached) == 1
+    mock_get.assert_not_called()
+
+
+@patch("httpx.get")
+def test_calendar_fetch_failure_fallback_cache(mock_get, tmp_path, monkeypatch):
+    monkeypatch.setattr("briefly.segments.get_user_dir", lambda: tmp_path)
+    
+    config = Config()
+    from briefly.config import CalendarFeedConfig
+    config.calendar.feeds = [
+        CalendarFeedConfig(url="https://remote.com/my_events.ics")
+    ]
+    
+    import hashlib
+    url_hash = hashlib.md5("https://remote.com/my_events.ics".encode("utf-8")).hexdigest()
+    cache_dir = tmp_path / "calendar_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / f"{url_hash}.ics"
+    cache_file.write_text("BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Cached Old Event\nDTSTART:20260705T120000Z\nEND:VEVENT\nEND:VCALENDAR", encoding="utf-8")
+    
+    mock_get.side_effect = Exception("Network down")
+    
+    segment = get_segment_impl("calendar")
+    data = segment.collect(config)
+    
+    assert data is not None
+    assert len(data) == 1
+    assert data[0]["event"]["SUMMARY"]["value"] == "Cached Old Event"

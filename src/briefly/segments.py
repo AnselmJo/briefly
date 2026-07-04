@@ -5,10 +5,12 @@ Each segment represents a discrete module in the daily brief run.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from briefly.config import Config, get_user_dir
 from briefly.llm.base import LanguageModelProvider
@@ -201,6 +203,299 @@ def fetch_weather(lat: float, lon: float) -> dict[str, Any] | None:
     return None
 
 
+def parse_ics_datetime(value: str, params: dict[str, str]) -> datetime | date | None:
+    """Parses standard ICS date/datetime format into date or datetime object."""
+    value = value.strip()
+    if "VALUE=DATE" in params.get("VALUE", "") or len(value) == 8:
+        try:
+            return date(int(value[0:4]), int(value[4:6]), int(value[6:8]))
+        except ValueError:
+            return None
+
+    if len(value) >= 15:
+        try:
+            is_utc = value.endswith("Z")
+            clean_val = value[:-1] if is_utc else value
+
+            dt = datetime(
+                int(clean_val[0:4]),
+                int(clean_val[4:6]),
+                int(clean_val[6:8]),
+                int(clean_val[9:11]),
+                int(clean_val[11:13]),
+                int(clean_val[13:15]),
+            )
+            if is_utc:
+                return dt.replace(tzinfo=ZoneInfo("UTC"))
+            return dt
+        except Exception:
+            return None
+    return None
+
+
+def fetch_calendar_data(source: str) -> str | None:
+    """Fetches an ICS source (local file or remote URL) with 1-hour caching."""
+    user_dir = get_user_dir()
+    cache_dir = user_dir / "calendar_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    if not source.startswith(("http://", "https://")):
+        # Treat as local file
+        from pathlib import Path
+        path = Path(source)
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        logger.warning("Local calendar file does not exist: %s", source)
+        return None
+
+    # Remote URL
+    url_hash = hashlib.md5(source.encode("utf-8")).hexdigest()
+    cache_path = cache_dir / f"{url_hash}.ics"
+
+    if cache_path.exists():
+        mtime = datetime.fromtimestamp(cache_path.stat().st_mtime)
+        if datetime.now() - mtime < timedelta(hours=1):
+            return cache_path.read_text(encoding="utf-8")
+
+    import httpx
+    try:
+        response = httpx.get(source, timeout=10.0)
+        if response.status_code == 200:
+            text = response.text
+            cache_path.write_text(text, encoding="utf-8")
+            return text
+    except Exception as e:
+        logger.warning("Failed to fetch remote calendar %s: %s", source, e)
+        if cache_path.exists():
+            logger.info("Using expired cached calendar for %s", source)
+            return cache_path.read_text(encoding="utf-8")
+
+    return None
+
+
+def parse_ics(content: str) -> list[dict[str, Any]]:
+    """Simple parser to unfold lines and group VEVENT properties."""
+    lines = []
+    for line in content.splitlines():
+        if line.startswith((" ", "\t")):
+            if lines:
+                lines[-1] += line[1:]
+        else:
+            lines.append(line)
+
+    events = []
+    current_event = None
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        if line.startswith("BEGIN:VEVENT"):
+            current_event = {}
+        elif line.startswith("END:VEVENT"):
+            if current_event is not None:
+                events.append(current_event)
+                current_event = None
+        elif current_event is not None:
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                name_params, val = parts
+                name_parts = name_params.split(";", 1)
+                name = name_parts[0].upper()
+                params = {}
+                if len(name_parts) == 2:
+                    for p in name_parts[1].split(";"):
+                        p_parts = p.split("=", 1)
+                        if len(p_parts) == 2:
+                            params[p_parts[0].upper()] = p_parts[1]
+                current_event[name] = {"value": val, "params": params}
+
+    return events
+
+
+def get_events_for_date(events: list[dict[str, Any]], target_date: date) -> list[dict[str, Any]]:
+    """Filters VEVENT dicts that fall on target_date, returning list of unified dicts."""
+    matching_events = []
+
+    for event in events:
+        dtstart_data = event.get("DTSTART")
+        if not dtstart_data:
+            continue
+
+        val = dtstart_data["value"]
+        params = dtstart_data["params"]
+
+        start = parse_ics_datetime(val, params)
+        if not start:
+            continue
+
+        rrule_data = event.get("RRULE")
+        rrule = rrule_data["value"] if rrule_data else None
+
+        is_on_date = False
+        if isinstance(start, datetime):
+            tzid = params.get("TZID")
+            if tzid:
+                try:
+                    event_tz = ZoneInfo(tzid.strip('"'))
+                    start_local = start.replace(tzinfo=event_tz)
+                    is_on_date = (start_local.date() == target_date)
+                except Exception:
+                    is_on_date = (start.date() == target_date)
+            else:
+                if val.endswith("Z"):
+                    try:
+                        local_tz = datetime.now().astimezone().tzinfo
+                        start_local = start.astimezone(local_tz)
+                        is_on_date = (start_local.date() == target_date)
+                    except Exception:
+                        is_on_date = (start.date() == target_date)
+                else:
+                    is_on_date = (start.date() == target_date)
+        else:
+            is_on_date = (start == target_date)
+
+        if not is_on_date and rrule:
+            if "FREQ=YEARLY" in rrule:
+                is_on_date = (start.month == target_date.month and start.day == target_date.day)
+
+        if is_on_date:
+            summary = event.get("SUMMARY", {}).get("value", "Unbenannter Termin")
+            summary = summary.replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\").strip()
+
+            event_time = None
+            if isinstance(start, datetime):
+                if start.tzinfo is not None:
+                    local_tz = datetime.now().astimezone().tzinfo
+                    start_local = start.astimezone(local_tz)
+                    event_time = start_local.strftime("%H:%M")
+                else:
+                    event_time = start.strftime("%H:%M")
+
+            matching_events.append({
+                "summary": summary,
+                "time": event_time,
+                "is_all_day": not isinstance(start, datetime),
+            })
+
+    return matching_events
+
+
+def filter_events(events: list[dict[str, Any]], include: list[str], exclude: list[str]) -> list[dict[str, Any]]:
+    """Filters events based on keyword lists (case-insensitive)."""
+    filtered = []
+    for e in events:
+        summary_lower = e["summary"].lower()
+
+        if exclude:
+            if any(kw.lower() in summary_lower for kw in exclude):
+                continue
+
+        if include:
+            if not any(kw.lower() in summary_lower for kw in include):
+                continue
+
+        filtered.append(e)
+    return filtered
+
+
+def get_birthday_name(summary: str) -> str | None:
+    """Extracts a capitalized name from a birthday event summary."""
+    summary_lower = summary.lower()
+    if "geburtstag" in summary_lower or "birthday" in summary_lower or "bday" in summary_lower:
+        for word in ["'s birthday", "'s bday", " birthday", " bday", " geburtstag", "s geburtstag"]:
+            if word in summary_lower:
+                idx = summary_lower.find(word)
+                if idx > 0:
+                    return summary[:idx].strip()
+        for prep in ["geburtstag von ", "birthday of "]:
+            if prep in summary_lower:
+                idx = summary_lower.find(prep)
+                return summary[idx + len(prep):].strip()
+        for colon in ["geburtstag:", "birthday:", "bday:"]:
+            if colon in summary_lower:
+                idx = summary_lower.find(colon)
+                return summary[idx + len(colon):].strip()
+        return summary
+    return None
+
+
+def format_calendar_programmatically(events: list[dict[str, Any]], language: str) -> str:
+    """Determined programmatic formatting when local Ollama LLM provider is unavailable."""
+    if not events:
+        return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
+
+    parts = []
+    birthdays = []
+    regular_events = []
+
+    for e in events:
+        bday_name = get_birthday_name(e["summary"])
+        if bday_name:
+            birthdays.append(bday_name)
+        else:
+            regular_events.append(e)
+
+    if birthdays:
+        names_str = " und ".join(birthdays) if language == "de" else " and ".join(birthdays)
+        if language == "de":
+            parts.append(f"Heute hat {names_str} Geburtstag.")
+        else:
+            parts.append(f"Today is {names_str}'s birthday.")
+
+    if regular_events:
+        for e in regular_events:
+            summary = e["summary"]
+            t = e["time"]
+            if language == "de":
+                if t:
+                    try:
+                        hr = int(t.split(":")[0])
+                        time_str = f"um {hr} Uhr"
+                    except Exception:
+                        time_str = f"um {t}"
+                else:
+                    time_str = "heute"
+                parts.append(f"Du hast {time_str} einen Termin: {summary}.")
+            else:
+                if t:
+                    try:
+                        hr = int(t.split(":")[0])
+                        ampm = "am" if hr < 12 else "pm"
+                        hr_12 = hr if hr <= 12 else hr - 12
+                        if hr_12 == 0:
+                            hr_12 = 12
+                        time_str = f"at {hr_12} {ampm}"
+                    except Exception:
+                        time_str = f"at {t}"
+                else:
+                    time_str = "today"
+                parts.append(f"You have an event {time_str}: {summary}.")
+
+    return " ".join(parts)
+
+
+def _build_calendar_prompt(events: list[dict[str, Any]], language: str) -> str:
+    lines = [
+        "Du bist der Sprecher für 'Briefly', ein persönliches tägliches Audio-Briefing.",
+        "Formuliere die folgenden Kalendereinträge für heute in einen flüssigen, freundlichen, gesprochenen Text um.",
+        "Schreibe ausschließlich den fertigen Sprechtext, ohne jeglichen Begleittext und ohne Einleitung/Überschrift.",
+        "Wichtig: Lies nicht einfach stur Zeiten und Titel vor (kein '10:00 Meeting'), sondern sprich in ganzen Sätzen.",
+        "Beispiele:",
+        "- 'Du hast um 16 Uhr einen Termin beim Kinderarzt Müller.'" if language == "de" else "- 'You have an appointment at pediatrician Müller at 4 pm.'",
+        "- 'Heute hat Lisa Geburtstag.'" if language == "de" else "- 'Today is Lisa's birthday.'",
+        "",
+        "Hier sind die heutigen Kalendereinträge:",
+    ]
+    for e in events:
+        time_str = f"um {e['time']}" if e["time"] else "Ganztägig"
+        if language != "de":
+            time_str = f"at {e['time']}" if e["time"] else "All-day"
+        lines.append(f"- {e['summary']} ({time_str})")
+
+    return "\n".join(lines)
+
+
 class BaseSegment:
     """Base class for all segment modules."""
 
@@ -295,7 +590,6 @@ class WeatherSegment(BaseSegment):
         code = current.get("weather_code", 0)
         wind = round(current.get("wind_speed_10m", 0))
 
-        # Max/min values for today
         max_temp = round(daily.get("temperature_2m_max", [0])[0])
         min_temp = round(daily.get("temperature_2m_min", [0])[0])
         rain_prob = round(daily.get("precipitation_probability_max", [0])[0])
@@ -332,6 +626,76 @@ class WeatherSegment(BaseSegment):
                 f"Today's forecast shows a high of {max_temp} degrees and a low of {min_temp} degrees. "
                 f"There is a {rain_prob}% chance of rain with {wind_desc}."
             )
+
+
+class CalendarSegment(BaseSegment):
+    """Calendar segment based on ICS feeds."""
+
+    def collect(self, config: Config) -> list[dict[str, Any]] | None:
+        if not config.calendar.feeds:
+            return None
+
+        events = []
+        for feed in config.calendar.feeds:
+            content = fetch_calendar_data(feed.url)
+            if not content:
+                continue
+
+            try:
+                raw_events = parse_ics(content)
+                # Resolve date is needed during script stage, but wait:
+                # We can store target date matching to let script format them.
+                # Since collect doesn't know target date (it runs before script),
+                # wait! How can we filter events by date in script stage if we collect them here?
+                # We can just return all raw events parsed from all feeds,
+                # and let script() filter by episode_date!
+                # Yes, returning the full list of raw events lets script() filter by target_date cleanly!
+                # But wait, we should apply include/exclude keyword filtering per feed here or in script?
+                # Since we keep track of which events come from which feed, we can associate them:
+                for raw_e in raw_events:
+                    events.append({
+                        "event": raw_e,
+                        "include": feed.include,
+                        "exclude": feed.exclude,
+                    })
+            except Exception as e:
+                logger.warning("Failed to parse calendar feed %s: %s", feed.url, e)
+
+        return events
+
+    def script(
+        self,
+        config: Config,
+        data: Any,
+        llm_provider: LanguageModelProvider,
+        language: str,
+        episode_date: date | None = None,
+    ) -> str:
+        if not data:
+            return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
+
+        target_date = episode_date or date.today()
+        
+        # Process and filter events
+        processed_events = []
+        for item in data:
+            raw_e = item["event"]
+            include = item["include"]
+            exclude = item["exclude"]
+            
+            evs = get_events_for_date([raw_e], target_date)
+            filtered = filter_events(evs, include, exclude)
+            processed_events.extend(filtered)
+
+        if not processed_events:
+            return "Du hast heute keine Termine." if language == "de" else "You have no events scheduled for today."
+
+        # Generate text
+        prompt = _build_calendar_prompt(processed_events, language)
+        try:
+            return llm_provider.generate_segment_text(prompt)
+        except Exception:
+            return format_calendar_programmatically(processed_events, language)
 
 
 class IntroSegment(BaseSegment):
@@ -455,6 +819,7 @@ _REGISTRY: dict[str, BaseSegment] = {
     "greeting": GreetingSegment("greeting"),
     "intro": IntroSegment("intro"),
     "weather": WeatherSegment("weather"),
+    "calendar": CalendarSegment("calendar"),
     "news": NewsSegment("news"),
     "topics": TopicsSegment("topics"),
     "outro": OutroSegment("outro"),

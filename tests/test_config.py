@@ -121,6 +121,7 @@ schedule:
         ("sources:\n  rss:\n    feeds:\n      - topic: news", "sources.rss.feeds.0.url"),
         ("user_name: ''", "user_name"),
         ("weather:\n  location: ''", "weather.location"),
+        ("calendar:\n  feeds:\n    - url: ''", "calendar.feeds.0.url"),
     ]
 )
 def test_invalid_config_cases(tmp_path, invalid_yaml, expected_key):

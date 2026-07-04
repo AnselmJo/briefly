@@ -158,6 +158,31 @@ erzeugt jeden Morgen automatisch eine neue Episode.
 3. Neue Episoden erscheinen automatisch nach jedem nächtlichen Lauf, inkl.
    Kapitelmarken zum Springen zwischen Segmenten.
 
+## Kalender-Integration (ICS Feeds)
+
+Das `calendar`-Segment liest Termine und Geburtstage aus ICS-Feeds oder lokalen `.ics`-Dateien aus. Du kannst ICS-Feed-URLs von den gängigsten Kalender-Diensten erhalten:
+
+### 1. Google Calendar
+1. Öffne [Google Calendar](https://calendar.google.com/) im Web.
+2. Gehe zu **Einstellungen** (Zahnrad-Symbol oben rechts) > **Einstellungen**.
+3. Wähle in der linken Leiste deinen Kalender unter **Einstellungen für meine Kalender** aus.
+4. Scrolle ganz nach unten zum Bereich **Kalender integrieren**.
+5. Kopiere die URL aus dem Feld **Privatadresse im iCal-Format** (endet auf `.ics`).
+   * *Hinweis: Verwende nicht die öffentliche Adresse, außer dein Kalender ist komplett öffentlich freigegeben.*
+
+### 2. Outlook.com / Microsoft 365
+1. Öffne Outlook im Web.
+2. Gehe zu **Einstellungen** (Zahnrad-Symbol oben rechts) > **Kalender** > **Geteilte Kalender** (oder **Kalender veröffentlichen**).
+3. Wähle unter **Kalender veröffentlichen** den gewünschten Kalender und die Berechtigung (z. B. "Kann alle Details sehen") aus.
+4. Klicke auf **Veröffentlichen**.
+5. Kopiere die generierte **ICS-Link-URL**.
+
+### 3. Apple iCloud Calendar
+1. Öffne die Kalender-App auf macOS/iOS oder gehe zu [iCloud.com](https://www.icloud.com/).
+2. Klicke neben dem Namen des Kalenders auf das **Teilen-Symbol** (Funkwellen-Symbol).
+3. Aktiviere **Öffentlicher Kalender**.
+4. Kopiere die bereitgestellte Webcal-URL und ändere das Protokoll am Anfang von `webcal://` zu `https://`.
+
 ## Tests
 
 ```bash

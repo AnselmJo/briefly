@@ -363,6 +363,23 @@ class WeatherConfig(BaseModel):
         return v.strip() if v is not None else None
 
 
+class CalendarFeedConfig(BaseModel):
+    url: str
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("calendar feed URL cannot be empty")
+        return v.strip()
+
+
+class CalendarConfig(BaseModel):
+    feeds: list[CalendarFeedConfig] = Field(default_factory=list)
+
+
 class ScheduleConfig(BaseModel):
     hour: int = 5
     minute: int = 30
@@ -442,12 +459,14 @@ class Config(BaseModel):
         SegmentConfig(id="greeting", enabled=True),
         SegmentConfig(id="intro", enabled=True),
         SegmentConfig(id="weather", enabled=True),
+        SegmentConfig(id="calendar", enabled=True),
         SegmentConfig(id="news", enabled=True),
         SegmentConfig(id="topics", enabled=True),
         SegmentConfig(id="outro", enabled=True),
     ])
     user_name: str = "Anselm"
     weather: WeatherConfig = Field(default_factory=WeatherConfig)
+    calendar: CalendarConfig = Field(default_factory=CalendarConfig)
     target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
 
