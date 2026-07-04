@@ -91,6 +91,21 @@ Um den Zustand deines Systems und der konfigurierten Dienste zu prüfen, steht d
 briefly doctor
 ```
 
+### Konfiguration und Sprachqualität-Optimierung (TTS)
+
+Briefly enthält eine integrierte Text-Bereinigung (Preprocessing) vor der Sprachausgabe durch Piper. Diese entfernt automatisch störende Formatierungen wie Markdown (Auszeichnungen, Links, Überschriften, Listenpunkte), HTML-Tags, Code-Blöcke und Tabellen, und normalisiert die Interpunktion (z.B. Anführungszeichen, Bindestriche, mehrfache Satzzeichen).
+
+Zusätzlich können über die Web-Oberfläche (unter Einstellungen) oder direkt in der `config.yaml` folgende Werte konfiguriert werden, um die Sprachqualität und den Lesefluss zu optimieren:
+
+```yaml
+tts:
+  # Sprechgeschwindigkeit (Standard: null oder 1.0; < 1.0 ist schneller, > 1.0 langsamer)
+  length_scale: 1.0
+  # Zusätzliche Pause in Millisekunden nach Satzenden (z.B. 250)
+  sentence_pause_ms: 250
+  # Zusätzliche Pause in Millisekunden nach Absatzenden (z.B. 600)
+  paragraph_pause_ms: 600
+```
 
 
 Web-Oberfläche starten (Eingaben/Einstellungen + Feed-Auslieferung):

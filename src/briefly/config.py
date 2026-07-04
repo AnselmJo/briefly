@@ -59,6 +59,9 @@ class TtsConfig(BaseModel):
     voice_de: str = "de_DE-thorsten-medium"
     voice_en: str = "en_US-lessac-medium"
     voices_dir: Path = Path("data/voices")
+    length_scale: float | None = None
+    sentence_pause_ms: int = 250
+    paragraph_pause_ms: int = 600
 
 
 class WebConfig(BaseModel):

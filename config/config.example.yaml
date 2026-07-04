@@ -41,6 +41,12 @@ tts:
   # Verzeichnis mit den heruntergeladenen Piper-Stimmen (<name>.onnx + .onnx.json).
   # Siehe README für den Download-Befehl.
   voices_dir: data/voices
+  # Geschwindigkeit der Sprachausgabe (Standard: null / 1.0, < 1.0 schneller, > 1.0 langsamer)
+  length_scale: 1.0
+  # Pause in Millisekunden nach Satzenden
+  sentence_pause_ms: 250
+  # Pause in Millisekunden nach Absatzenden
+  paragraph_pause_ms: 600
 
 web:
   host: 0.0.0.0

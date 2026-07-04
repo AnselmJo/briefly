@@ -13,15 +13,28 @@ import wave
 from pathlib import Path
 
 from piper import PiperVoice
+from piper.config import SynthesisConfig
 
 from briefly.models import ScriptSegment
+from briefly.tts.preprocessor import preprocess_text
 
 
 class PiperSpeechSynthesisProvider:
-    def __init__(self, voices_dir: Path, voice_de: str, voice_en: str) -> None:
+    def __init__(
+        self,
+        voices_dir: Path,
+        voice_de: str,
+        voice_en: str,
+        length_scale: float | None = None,
+        sentence_pause_ms: int = 0,
+        paragraph_pause_ms: int = 0,
+    ) -> None:
         self.voices_dir = Path(voices_dir)
         self.voice_de = voice_de
         self.voice_en = voice_en
+        self.length_scale = length_scale
+        self.sentence_pause_ms = sentence_pause_ms
+        self.paragraph_pause_ms = paragraph_pause_ms
         self._loaded_voices: dict[str, PiperVoice] = {}
 
     def synthesize_segment(
@@ -29,8 +42,35 @@ class PiperSpeechSynthesisProvider:
     ) -> None:
         voice = self._load_voice(language)
         output_wav_path.parent.mkdir(parents=True, exist_ok=True)
+
+        paragraphs = preprocess_text(segment.text)
+        syn_config = SynthesisConfig(length_scale=self.length_scale)
+
         with wave.open(str(output_wav_path), "wb") as wav_file:
-            voice.synthesize_wav(segment.text, wav_file)
+            # Set WAV parameters from voice configuration
+            wav_file.setframerate(voice.config.sample_rate)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setnchannels(1)  # mono
+
+            if not paragraphs:
+                return
+
+            for p_idx, paragraph in enumerate(paragraphs):
+                sentences = list(voice.synthesize(paragraph, syn_config))
+                for s_idx, chunk in enumerate(sentences):
+                    wav_file.writeframes(chunk.audio_int16_bytes)
+
+                    is_last_sentence_in_para = s_idx == len(sentences) - 1
+                    pause_ms = (
+                        self.paragraph_pause_ms
+                        if is_last_sentence_in_para
+                        else self.sentence_pause_ms
+                    )
+
+                    if pause_ms > 0:
+                        silence_len = int(voice.config.sample_rate * (pause_ms / 1000.0))
+                        silence_bytes = bytes(silence_len * 2)
+                        wav_file.writeframes(silence_bytes)
 
     def _load_voice(self, language: str) -> PiperVoice:
         voice_name = self.voice_de if language.lower().startswith("de") else self.voice_en

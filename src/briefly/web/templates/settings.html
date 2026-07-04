@@ -18,6 +18,15 @@
   <label for="exclude_keywords">Ausschluss-Stichwörter (eine pro Zeile)</label>
   <textarea id="exclude_keywords" name="exclude_keywords">{{ config.exclude_keywords | join("\n") }}</textarea>
 
+  <label for="tts_length_scale">TTS-Geschwindigkeit (length_scale, z.B. 1.0 = Standard, < 1.0 = schneller, > 1.0 = langsamer)</label>
+  <input type="number" step="0.05" id="tts_length_scale" name="tts_length_scale" value="{{ config.tts.length_scale if config.tts.length_scale is not none else '' }}" placeholder="Standard (1.0)" />
+
+  <label for="tts_sentence_pause_ms">TTS-Pause nach Satzenden (sentence_pause_ms in Millisekunden)</label>
+  <input type="number" id="tts_sentence_pause_ms" name="tts_sentence_pause_ms" value="{{ config.tts.sentence_pause_ms }}" />
+
+  <label for="tts_paragraph_pause_ms">TTS-Pause nach Absatzenden (paragraph_pause_ms in Millisekunden)</label>
+  <input type="number" id="tts_paragraph_pause_ms" name="tts_paragraph_pause_ms" value="{{ config.tts.paragraph_pause_ms }}" />
+
   <button type="submit">Speichern</button>
 </form>
 {% endblock %}

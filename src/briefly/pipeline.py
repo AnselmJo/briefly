@@ -74,7 +74,12 @@ def run_audio(
 ) -> EpisodeManifest:
     """Stufe 4: synthetisiert die Segmente und baut die finale Audiodatei mit Kapiteln."""
     provider = tts_provider or PiperSpeechSynthesisProvider(
-        voices_dir=config.tts.voices_dir, voice_de=config.tts.voice_de, voice_en=config.tts.voice_en
+        voices_dir=config.tts.voices_dir,
+        voice_de=config.tts.voice_de,
+        voice_en=config.tts.voice_en,
+        length_scale=config.tts.length_scale,
+        sentence_pause_ms=config.tts.sentence_pause_ms,
+        paragraph_pause_ms=config.tts.paragraph_pause_ms,
     )
     episodes_dir = config.delivery.output_dir / "episodes"
     episodes_dir.mkdir(parents=True, exist_ok=True)

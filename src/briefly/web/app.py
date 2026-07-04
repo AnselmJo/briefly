@@ -64,6 +64,9 @@ def settings_save(
     topics_include: str = Form(""),
     topics_exclude: str = Form(""),
     exclude_keywords: str = Form(""),
+    tts_length_scale: str = Form(""),
+    tts_sentence_pause_ms: int = Form(250),
+    tts_paragraph_pause_ms: int = Form(600),
 ):
     config = _get_config()
     config.language.target = language_target.strip()
@@ -71,6 +74,12 @@ def settings_save(
     config.topics.include = _split_lines(topics_include)
     config.topics.exclude = _split_lines(topics_exclude)
     config.exclude_keywords = _split_lines(exclude_keywords)
+    
+    val = tts_length_scale.strip()
+    config.tts.length_scale = float(val) if val else None
+    config.tts.sentence_pause_ms = tts_sentence_pause_ms
+    config.tts.paragraph_pause_ms = tts_paragraph_pause_ms
+    
     save_config(config, _CONFIG_PATH)
     return RedirectResponse("/settings", status_code=303)
 

@@ -32,6 +32,9 @@ def test_settings_roundtrip(client):
             "topics_include": "books",
             "topics_exclude": "",
             "exclude_keywords": "Krieg",
+            "tts_length_scale": "1.25",
+            "tts_sentence_pause_ms": "350",
+            "tts_paragraph_pause_ms": "750",
         },
         follow_redirects=False,
     )
@@ -40,6 +43,9 @@ def test_settings_roundtrip(client):
     settings_page = client.get("/settings")
     assert "books" in settings_page.text
     assert "Krieg" in settings_page.text
+    assert "1.25" in settings_page.text
+    assert "350" in settings_page.text
+    assert "750" in settings_page.text
 
 
 def test_feeds_add_and_delete(client):
