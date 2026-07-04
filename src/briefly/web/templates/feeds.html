@@ -5,23 +5,81 @@
 <table>
   <thead>
     <tr>
-      <th>URL</th>
-      <th>Thema</th>
-      <th>Gewicht</th>
-      <th></th>
+      <th>Reihenfolge</th>
+      <th>Status</th>
+      <th>Feed-Informationen</th>
+      <th>Gesundheit</th>
+      <th>Aktionen</th>
     </tr>
   </thead>
   <tbody>
     {% for feed in feeds %}
-    <tr>
-      <td>{{ feed.url }}</td>
-      <td>{{ feed.topic or "–" }}</td>
-      <td>{{ feed.weight }}</td>
+    {% set feed_health = health.get(feed.url, {}) %}
+    <tr {% if not feed.enabled %}style="opacity: 0.6;"{% endif %}>
+      <!-- Order -->
       <td>
-        <form method="post" action="/feeds/delete" style="margin: 0">
+        <div style="display: flex; gap: 4px;">
+          <form method="post" action="/feeds/move-up" style="margin: 0">
+            <input type="hidden" name="url" value="{{ feed.url }}" />
+            <button type="submit" style="margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem;">▲</button>
+          </form>
+          <form method="post" action="/feeds/move-down" style="margin: 0">
+            <input type="hidden" name="url" value="{{ feed.url }}" />
+            <button type="submit" style="margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem;">▼</button>
+          </form>
+        </div>
+      </td>
+
+      <!-- Enabled / Disabled Toggle -->
+      <td>
+        <form method="post" action="/feeds/toggle" style="margin: 0">
           <input type="hidden" name="url" value="{{ feed.url }}" />
-          <button type="submit" class="secondary">Entfernen</button>
+          <button type="submit" class="secondary" style="margin: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem;">
+            {% if feed.enabled %}Aktiv{% else %}Inaktiv{% endif %}
+          </button>
         </form>
+      </td>
+
+      <!-- Feed Info -->
+      <td>
+        <strong>{{ feed.url }}</strong><br/>
+        <span class="muted">Thema: {{ feed.topic or "–" }} | Gewicht: {{ feed.weight }}</span>
+      </td>
+
+      <!-- Health -->
+      <td>
+        {% if not feed.enabled %}
+          <span style="color: #666; font-weight: bold;">Deaktiviert</span>
+        {% elif feed_health.status == "ok" %}
+          <span style="color: #2e7d32; font-weight: bold;">✓ OK</span><br/>
+          <span class="muted" style="font-size: 0.75rem;">
+            Einträge: {{ feed_health.item_count }}<br/>
+            Letzter Erfolg: {{ feed_health.last_success | replace('T', ' ') | slice(0, 19) if feed_health.last_success else "Nie" }}
+          </span>
+        {% elif feed_health.status == "error" %}
+          <span style="color: #c62828; font-weight: bold;">✗ Fehler</span><br/>
+          <span style="color: #c62828; font-size: 0.8rem;">{{ feed_health.error_message }}</span><br/>
+          <span class="muted" style="font-size: 0.75rem; display: block; margin-top: 4px; max-width: 250px; line-height: 1.2; color: #b71c1c;">
+            <strong>Lösungsvorschlag:</strong> {{ feed_health.suggested_fix }}
+          </span>
+        {% else %}
+          <span class="muted">Noch nicht geprüft</span>
+        {% endif %}
+      </td>
+
+      <!-- Actions -->
+      <td>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <form method="post" action="/feeds/test" style="margin: 0">
+            <input type="hidden" name="url" value="{{ feed.url }}" />
+            <button type="submit" style="margin: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem; width: 100%;">Test</button>
+          </form>
+          <a href="/feeds/preview?url={{ feed.url | urlencode }}" style="display: inline-block; text-align: center; text-decoration: none; padding: 0.3rem 0.6rem; font-size: 0.85rem; background: var(--accent-secondary); color: white; border-radius: 6px; font-weight: 600;">Vorschau</a>
+          <form method="post" action="/feeds/delete" style="margin: 0">
+            <input type="hidden" name="url" value="{{ feed.url }}" />
+            <button type="submit" class="secondary" style="margin: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem; width: 100%; background: #c62828;">Entfernen</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
@@ -29,6 +87,7 @@
 </table>
 
 <div class="card">
+  <h2>Feed hinzufügen</h2>
   <form method="post" action="/feeds">
     <label for="url">Feed-URL</label>
     <input type="url" id="url" name="url" required />

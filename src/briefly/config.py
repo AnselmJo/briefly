@@ -191,6 +191,7 @@ class RssFeedConfig(BaseModel):
     url: str
     topic: str | None = None
     weight: float = 1.0
+    enabled: bool = True
 
     @field_validator("url")
     @classmethod

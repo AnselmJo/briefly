@@ -86,3 +86,42 @@ def test_inbox_add_and_delete(client, tmp_path):
 def test_episode_file_rejects_path_traversal(client):
     response = client.get("/episodes/..%2f..%2fconfig.yaml")
     assert response.status_code == 404
+
+
+def test_feeds_toggle_move_test_preview(client, monkeypatch):
+    import briefly.sources.rss as rss_source
+
+    mock_health = {
+        "status": "ok",
+        "error_message": None,
+        "suggested_fix": None,
+        "item_count": 5,
+        "parsed": None,
+    }
+    monkeypatch.setattr(rss_source, "check_feed_health", lambda url: mock_health)
+
+    # 1. Add two feeds
+    client.post("/feeds", data={"url": "https://example.com/feed1", "topic": "news", "weight": "1.0"})
+    client.post("/feeds", data={"url": "https://example.com/feed2", "topic": "tech", "weight": "1.0"})
+
+    # Check order
+    feeds_html = client.get("/feeds").text
+    assert "feed1" in feeds_html
+    assert "feed2" in feeds_html
+
+    # 2. Toggle enabled state of feed1
+    toggle_res = client.post("/feeds/toggle", data={"url": "https://example.com/feed1"}, follow_redirects=False)
+    assert toggle_res.status_code == 303
+    
+    # 3. Move feed2 up (should put feed2 before feed1)
+    move_res = client.post("/feeds/move-up", data={"url": "https://example.com/feed2"}, follow_redirects=False)
+    assert move_res.status_code == 303
+    
+    # 4. Test feed1
+    test_res = client.post("/feeds/test", data={"url": "https://example.com/feed1"}, follow_redirects=False)
+    assert test_res.status_code == 303
+
+    # 5. Preview feed1
+    preview_res = client.get("/feeds/preview?url=https://example.com/feed1")
+    assert preview_res.status_code == 200
+    assert "Feed-Vorschau" in preview_res.text

@@ -130,14 +130,23 @@ def settings_save(
 @app.get("/feeds")
 def feeds_list(request: Request):
     config = _get_config()
-    return templates.TemplateResponse(request, "feeds.html", {"feeds": config.sources.rss.feeds})
+    from briefly.sources.rss import load_feed_health
+    health_data = load_feed_health()
+    return templates.TemplateResponse(
+        request,
+        "feeds.html",
+        {
+            "feeds": config.sources.rss.feeds,
+            "health": health_data
+        }
+    )
 
 
 @app.post("/feeds")
 def feeds_add(url: str = Form(...), topic: str = Form(""), weight: float = Form(1.0)):
     config = _get_config()
     config.sources.rss.feeds.append(
-        RssFeedConfig(url=url.strip(), topic=topic.strip() or None, weight=weight)
+        RssFeedConfig(url=url.strip(), topic=topic.strip() or None, weight=weight, enabled=True)
     )
     save_config(config, _CONFIG_PATH)
     return RedirectResponse("/feeds", status_code=303)
@@ -149,6 +158,68 @@ def feeds_delete(url: str = Form(...)):
     config.sources.rss.feeds = [feed for feed in config.sources.rss.feeds if feed.url != url]
     save_config(config, _CONFIG_PATH)
     return RedirectResponse("/feeds", status_code=303)
+
+
+@app.post("/feeds/toggle")
+def feeds_toggle(url: str = Form(...)):
+    config = _get_config()
+    for feed in config.sources.rss.feeds:
+        if feed.url == url:
+            feed.enabled = not getattr(feed, "enabled", True)
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/feeds", status_code=303)
+
+
+@app.post("/feeds/move-up")
+def feeds_move_up(url: str = Form(...)):
+    config = _get_config()
+    feeds = config.sources.rss.feeds
+    for idx, feed in enumerate(feeds):
+        if feed.url == url:
+            if idx > 0:
+                feeds[idx], feeds[idx - 1] = feeds[idx - 1], feeds[idx]
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/feeds", status_code=303)
+
+
+@app.post("/feeds/move-down")
+def feeds_move_down(url: str = Form(...)):
+    config = _get_config()
+    feeds = config.sources.rss.feeds
+    for idx, feed in enumerate(feeds):
+        if feed.url == url:
+            if idx < len(feeds) - 1:
+                feeds[idx], feeds[idx + 1] = feeds[idx + 1], feeds[idx]
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/feeds", status_code=303)
+
+
+@app.post("/feeds/test")
+def feeds_test(url: str = Form(...)):
+    from briefly.sources.rss import check_feed_health, update_feed_health_status
+    res = check_feed_health(url)
+    update_feed_health_status(url, res)
+    return RedirectResponse("/feeds", status_code=303)
+
+
+@app.get("/feeds/preview")
+def feeds_preview(request: Request, url: str):
+    from briefly.sources.rss import check_feed_health
+    res = check_feed_health(url)
+    return templates.TemplateResponse(
+        request,
+        "feed_preview.html",
+        {
+            "url": url,
+            "status": res["status"],
+            "error_message": res["error_message"],
+            "suggested_fix": res["suggested_fix"],
+            "parsed": res.get("parsed")
+        }
+    )
 
 
 @app.get("/inbox")

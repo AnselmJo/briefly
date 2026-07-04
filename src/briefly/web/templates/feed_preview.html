@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Feed-Vorschau</h1>
+<p><strong>URL:</strong> <a href="{{ url }}" target="_blank">{{ url }}</a></p>
+
+{% if status == "error" %}
+  <div style="border: 1px solid #ffcdd2; background: #ffebee; padding: 1.5rem; border-radius: 8px; margin-top: 1rem; color: #c62828;">
+    <h3 style="margin-top: 0;">✗ Fehler beim Laden des Feeds</h3>
+    <p><strong>Fehlermeldung:</strong> {{ error_message }}</p>
+    <p><strong>Lösungsvorschlag:</strong> {{ suggested_fix }}</p>
+  </div>
+{% else %}
+  <div class="card">
+    <h2>{{ parsed.feed.get('title', 'Unbekannter Feed-Titel') if parsed and parsed.feed else 'Unbekannter Feed-Titel' }}</h2>
+    <p class="muted">{{ parsed.feed.get('subtitle', parsed.feed.get('description', 'Keine Beschreibung vorhanden.')) if parsed and parsed.feed else 'Keine Beschreibung vorhanden.' }}</p>
+  </div>
+
+  <h3 style="margin-top: 2rem;">Einträge (Top 10)</h3>
+  {% if parsed and parsed.entries %}
+    {% for entry in parsed.entries[:10] %}
+      <div class="card">
+        <h4><a href="{{ entry.get('link', '#') }}" target="_blank">{{ entry.get('title', 'Kein Titel') }}</a></h4>
+        <p style="font-size: 0.95rem;">{{ entry.get('summary', entry.get('description', 'Kein Inhalt vorhanden.')) | striptags | truncate(300) }}</p>
+        <span class="muted" style="font-size: 0.8rem;">Veröffentlicht: {{ entry.get('published', 'Unbekannt') }}</span>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>Keine Einträge in diesem Feed gefunden.</p>
+  {% endif %}
+{% endif %}
+
+<div style="margin-top: 2rem;">
+  <a href="/feeds" style="display: inline-block; padding: 0.6rem 1.2rem; background: var(--border); color: var(--text); border-radius: 6px; text-decoration: none; font-weight: 600;">Zurück zur Übersicht</a>
+</div>
+{% endblock %}
