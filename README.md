@@ -8,17 +8,19 @@ Briefly läuft **vollkommen lokal und privat** auf deinem Computer (macOS oder W
 
 ---
 
-## 🚀 Erste Folge in 5 Minuten (Schnellstart)
+## 🚀 Täglicher Gebrauch (Schnellstart)
 
-Sobald Briefly installiert ist, kannst du sofort loslegen:
+Nachdem die Installation abgeschlossen ist, kannst du Briefly von überall aus starten. Du musst dich dafür in **keinem bestimmten Ordner** befinden und brauchst keine spezielle Python-Umgebung aktivieren.
 
-1. **Web-Oberfläche starten:** Öffne ein Terminal- oder PowerShell-Fenster im Briefly-Ordner und tippe ein:
-   ```bash
-   briefly start
-   ```
-2. **Dashboard öffnen:** Öffne deinen Internet-Browser und rufe auf: [http://localhost:8787](http://localhost:8787).
-3. **Folge erzeugen:** Klicke auf den großen Button **„Neue Folge erzeugen“**. Die Statusanzeige springt auf ⏳ *„Neue Folge wird gerade erzeugt...“*.
-4. **Anhören:** Nach ca. 2 bis 3 Minuten aktualisiert sich die Seite. Du siehst die fertige Folge des Tages, kannst sie direkt im Browser abspielen oder als M4B-Audiodatei herunterladen.
+Öffne einfach dein Terminal (macOS) oder die PowerShell (Windows) und führe folgenden Befehl aus:
+
+```bash
+briefly start
+```
+
+1. **Dashboard öffnen:** Rufe in deinem Browser [http://localhost:8787](http://localhost:8787) auf.
+2. **Folge erzeugen:** Klicke auf den großen Button **„Neue Folge erzeugen“**. Die Statusanzeige wechselt auf ⏳ *„Neue Folge wird gerade erzeugt...“*.
+3. **Anhören:** Nach 2–3 Minuten aktualisiert sich die Seite automatisch und du kannst deine erste Folge direkt abspielen oder herunterladen.
 
 ---
 
@@ -279,3 +281,16 @@ graph TD
 3. **Skript (Script):** Ein lokales LLM (z. B. Qwen) formuliert aus den nackten Rohdaten ein natürlich fließendes Radio-Skript mit geschmeidigen Überleitungen.
 4. **Audio (Audio):** Der TTS-Synthesizer Piper wandelt das fertige Skript satzweise in Sprache um. FFmpeg fügt diese zu einer M4B-Hörbuchdatei inklusive Kapitelmarken zusammen.
 5. **Ausliefern (Deliver):** Der lokale Webserver aktualisiert die Podcast-XML-Datei, sodass dein Smartphone die neue Folge sofort herunterladen kann.
+
+---
+
+## 🛠️ Entwickler-Hinweise (Developer Notes)
+
+Wenn du am Quellcode von Briefly mitarbeiten möchtest oder manuelle Entwicklungsschritte ausführst:
+- **Virtuelle Umgebung aktivieren:**
+  - macOS: `source .venv/bin/activate` (im Briefly-Projektordner ausgeführt)
+  - Windows: `.venv\Scripts\Activate.ps1`
+- **Manuelle CLI-Ausführung im venv:**
+  Falls du die globale Verknüpfung umgehen möchtest, kannst du die CLI direkt über den Pfad der virtuellen Umgebung ausführen:
+  - macOS: `./.venv/bin/briefly run`
+  - Windows: `.\.venv\Scripts\briefly.exe run`
