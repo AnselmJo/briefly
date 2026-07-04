@@ -22,6 +22,34 @@ _APP_DIR = Path(__file__).parent
 _CONFIG_PATH = get_default_config_path()
 _ALLOWED_EPISODE_SUFFIXES = {".m4b", ".txt", ".json"}
 
+_SEGMENT_NAMES = {
+    "de": {
+        "greeting": "Begrüßung & Datum",
+        "intro": "Einleitung & Stimmung",
+        "weather": "Wetterbericht",
+        "calendar": "Kalender & Geburtstage",
+        "inbox": "Persönliche Notizen & Inbox",
+        "news": "Hauptnachrichten (RSS)",
+        "topics": "Weitere Themen (RSS)",
+        "affirmation": "Tägliche Affirmation",
+        "funfact": "Interessanter Fakt",
+        "outro": "Verabschiedung & Ausblick",
+    },
+    "en": {
+        "greeting": "Greeting & Date",
+        "intro": "Introduction & Mood",
+        "weather": "Weather Forecast",
+        "calendar": "Calendar & Birthdays",
+        "inbox": "Personal Notes & Inbox",
+        "news": "Main News (RSS)",
+        "topics": "Other Topics (RSS)",
+        "affirmation": "Daily Affirmation",
+        "funfact": "Fascinating Fact",
+        "outro": "Outro & Wrapping Up",
+    }
+}
+
+
 app = FastAPI(title="Briefly")
 app.mount("/static", StaticFiles(directory=str(_APP_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_APP_DIR / "templates"))
@@ -74,16 +102,44 @@ def _get_config() -> Config:
     return load_config(_CONFIG_PATH)
 
 
+def load_last_run() -> dict | None:
+    import json
+    from briefly.config import get_user_dir
+    path = get_user_dir() / "last_run.json"
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
+
+
 @app.get("/")
 def dashboard(request: Request):
     config = _get_config()
     episodes_dir = config.delivery.output_dir / "episodes"
+    last_run = load_last_run()
+    
+    latest_date_str = _latest_episode_date(episodes_dir)
+    audio_path = None
+    if latest_date_str:
+        potential_audio = episodes_dir / f"{latest_date_str}.m4b"
+        if potential_audio.is_file():
+            audio_path = f"/episodes/{latest_date_str}.m4b"
+
+    model_name = config.llm.model
+    voice_name = f"Deutsch ({config.tts.voice_de})" if config.tts.language == "de" else f"English ({config.tts.voice_en})"
+    
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
-            "latest_episode": _latest_episode_date(episodes_dir),
+            "latest_episode": latest_date_str,
+            "audio_path": audio_path,
             "feed_url": f"{config.delivery.base_url}/feed.xml",
+            "last_run": last_run,
+            "model_name": model_name,
+            "voice_name": voice_name,
         },
     )
 
@@ -220,6 +276,58 @@ def feeds_preview(request: Request, url: str):
             "parsed": res.get("parsed")
         }
     )
+
+
+@app.get("/segments")
+def segments_list(request: Request):
+    config = _get_config()
+    lang = config.tts.language
+    names = _SEGMENT_NAMES.get(lang, _SEGMENT_NAMES["en"])
+    return templates.TemplateResponse(
+        request,
+        "segments.html",
+        {
+            "segments": config.segments,
+            "segment_names": names
+        }
+    )
+
+
+@app.post("/segments/toggle")
+def segments_toggle(id: str = Form(...)):
+    config = _get_config()
+    for seg in config.segments:
+        if seg.id == id:
+            seg.enabled = not seg.enabled
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/segments", status_code=303)
+
+
+@app.post("/segments/move-up")
+def segments_move_up(id: str = Form(...)):
+    config = _get_config()
+    segments = config.segments
+    for idx, seg in enumerate(segments):
+        if seg.id == id:
+            if idx > 0:
+                segments[idx], segments[idx - 1] = segments[idx - 1], segments[idx]
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/segments", status_code=303)
+
+
+@app.post("/segments/move-down")
+def segments_move_down(id: str = Form(...)):
+    config = _get_config()
+    segments = config.segments
+    for idx, seg in enumerate(segments):
+        if seg.id == id:
+            if idx < len(segments) - 1:
+                segments[idx], segments[idx + 1] = segments[idx + 1], segments[idx]
+            break
+    save_config(config, _CONFIG_PATH)
+    return RedirectResponse("/segments", status_code=303)
 
 
 @app.get("/inbox")

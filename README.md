@@ -1,5 +1,7 @@
 # Briefly
 
+![Briefly Web-Dashboard](docs/screenshots/dashboard.jpg)
+
 Persönliches tägliches Audio-Briefing ("Daily Cast"): eine automatisch
 generierte, ~10-minütige Sprachfolge aus News, Wissens-Themen und eigenen
 Inbox-Einträgen (Notizen, Buchzusammenfassungen, Links), ausgeliefert als

@@ -1,18 +1,107 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Dashboard</h1>
+<p class="muted">Willkommen bei deinem Daily Cast. Hier kannst du die heutige Folge abspielen, herunterladen oder eine neue Generierung anstoßen.</p>
 
+<!-- 1. Today's Episode -->
 <div class="card">
+  <h2>Heutige Folge</h2>
   {% if latest_episode %}
-  <p>Letzte Episode: <strong>{{ latest_episode }}</strong></p>
+    <p>Aktuelle Folge vom: <strong>{{ latest_episode }}</strong></p>
+    {% if audio_path %}
+      <audio controls src="{{ audio_path }}" style="width: 100%; margin-top: 1rem;"></audio>
+      <div style="margin-top: 1rem;">
+        <a href="{{ audio_path }}" download style="display: inline-block; padding: 0.6rem 1.2rem; background: var(--accent-secondary); color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">Folge herunterladen (M4B)</a>
+      </div>
+    {% else %}
+      <p class="muted">Audio-Datei konnte nicht geladen werden.</p>
+    {% endif %}
   {% else %}
-  <p class="muted">Noch keine Episode erzeugt.</p>
+    <p class="muted" style="margin-bottom: 0;">Es wurde noch keine Folge für heute erzeugt.</p>
   {% endif %}
-  <p class="muted">Feed-URL zum Abonnieren (z.B. in AntennaPod, Android):</p>
-  <p><code>{{ feed_url }}</code></p>
 </div>
 
-<form method="post" action="/run">
-  <button type="submit">Jetzt erzeugen</button>
-</form>
+<!-- 2. Generation Control and Live Status -->
+<div class="card" style="margin-top: 1.5rem;">
+  <h2>Folgen-Erstellung</h2>
+  {% if last_run %}
+    {% if last_run.status == "running" %}
+      <div style="background: #e3f2fd; border: 1px solid #90caf9; padding: 1rem; border-radius: 6px; color: #0d47a1; display: flex; align-items: center; gap: 10px;">
+        <span style="display: inline-block; animation: spin 1.5s linear infinite; font-size: 1.25rem;">⏳</span>
+        <div>
+          <strong>Neue Folge wird gerade erzeugt...</strong>
+          <span style="display: block; font-size: 0.8rem; opacity: 0.8; margin-top: 2px;">Diese Seite aktualisiert sich automatisch in wenigen Sekunden.</span>
+        </div>
+      </div>
+    {% elif last_run.status == "success" %}
+      <div style="background: #e8f5e9; border: 1px solid #a5d6a7; padding: 1rem; border-radius: 6px; color: #1b5e20;">
+        <strong>Erstellung erfolgreich!</strong> Letzter Lauf am {{ last_run.timestamp | replace('T', ' ') | slice(0, 16) }}
+      </div>
+    {% elif last_run.status == "failed" %}
+      <div style="background: #ffebee; border: 1px solid #ef9a9a; padding: 1rem; border-radius: 6px; color: #b71c1c;">
+        <strong>Erstellung fehlgeschlagen!</strong>
+        <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;"><strong>Fehler:</strong> {{ last_run.error }}</p>
+        <p style="margin: 0.5rem 0 0 0; font-size: 0.8rem; opacity: 0.8;">Bitte prüfe deine Quellen (Feeds) und die Einstellungen.</p>
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="muted" style="margin-bottom: 0;">Bisher wurde noch keine manuelle Erstellung durchgeführt.</p>
+  {% endif %}
+
+  <form method="post" action="/run" style="margin-top: 1rem;">
+    <button type="submit" {% if last_run and last_run.status == "running" %}disabled style="background: #ccc; cursor: not-allowed;"{% endif %}>
+      {% if last_run and last_run.status == "running" %}Wird erzeugt...{% else %}Neue Folge erzeugen{% endif %}
+    </button>
+  </form>
+</div>
+
+<!-- 3. RSS Copy Link -->
+<div class="card" style="margin-top: 1.5rem;">
+  <h2>Podcast abonnieren (RSS Feed)</h2>
+  <p class="muted">Kopiere diese Adresse, um deinen Podcast in einer App auf deinem Handy (z. B. AntennaPod oder Apple Podcasts) zu abonnieren.</p>
+  <div style="display: flex; gap: 8px; margin-top: 0.5rem;">
+    <input type="text" id="rssUrl" readonly value="{{ feed_url }}" style="flex: 1; margin: 0; padding: 0.6rem; font-family: monospace; font-size: 0.9rem;" />
+    <button onclick="copyRssUrl()" style="margin: 0; padding: 0.6rem 1.2rem;">Kopieren</button>
+  </div>
+  <span id="copySuccess" style="color: #2e7d32; font-size: 0.85rem; display: none; margin-top: 0.5rem; font-weight: bold;">Kopiert!</span>
+</div>
+
+<!-- 4. System Settings -->
+<div class="card" style="margin-top: 1.5rem;">
+  <h2>System-Informationen</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-top: 0.5rem;">
+    <tr style="border-bottom: 1px solid var(--border);">
+      <td style="font-weight: bold; padding: 0.75rem 0; width: 40%;">Sprech-Stimme:</td>
+      <td style="padding: 0.75rem 0;">{{ voice_name }}</td>
+    </tr>
+    <tr>
+      <td style="font-weight: bold; padding: 0.75rem 0; width: 40%;">KI-Modell:</td>
+      <td style="padding: 0.75rem 0;">{{ model_name }}</td>
+    </tr>
+  </table>
+</div>
+
+<script>
+function copyRssUrl() {
+  var copyText = document.getElementById("rssUrl");
+  copyText.select();
+  copyText.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(copyText.value);
+  
+  var successSpan = document.getElementById("copySuccess");
+  successSpan.style.display = "inline";
+  setTimeout(function() {
+    successSpan.style.display = "none";
+  }, 2000);
+}
+</script>
+
+{% if last_run and last_run.status == "running" %}
+<script>
+  setTimeout(function() {
+    window.location.reload();
+  }, 5000);
+</script>
+{% endif %}
+
 {% endblock %}

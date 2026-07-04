@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Segments (Abschnitte)</h1>
+<p class="muted">Bestimme, welche Abschnitte in deiner täglichen Folge enthalten sein sollen und in welcher Reihenfolge sie abgesprochen werden.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Reihenfolge</th>
+      <th>Status</th>
+      <th>Abschnitt</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for segment in segments %}
+    <tr {% if not segment.enabled %}style="opacity: 0.6;"{% endif %}>
+      <!-- Order / Move Up & Down -->
+      <td>
+        <div style="display: flex; gap: 4px;">
+          <form method="post" action="/segments/move-up" style="margin: 0">
+            <input type="hidden" name="id" value="{{ segment.id }}" />
+            <button type="submit" style="margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem;">▲</button>
+          </form>
+          <form method="post" action="/segments/move-down" style="margin: 0">
+            <input type="hidden" name="id" value="{{ segment.id }}" />
+            <button type="submit" style="margin: 0; padding: 0.2rem 0.5rem; font-size: 0.8rem;">▼</button>
+          </form>
+        </div>
+      </td>
+
+      <!-- Enabled / Disabled Toggle -->
+      <td>
+        <form method="post" action="/segments/toggle" style="margin: 0">
+          <input type="hidden" name="id" value="{{ segment.id }}" />
+          <button type="submit" class="secondary" style="margin: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem;">
+            {% if segment.enabled %}Aktiv{% else %}Inaktiv{% endif %}
+          </button>
+        </form>
+      </td>
+
+      <!-- Friendly Segment Name -->
+      <td>
+        <strong>{{ segment_names.get(segment.id, segment.id) }}</strong>
+        <span class="muted" style="display: block; font-size: 0.8rem;">(Interner Name: {{ segment.id }})</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

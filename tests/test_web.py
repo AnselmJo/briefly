@@ -125,3 +125,18 @@ def test_feeds_toggle_move_test_preview(client, monkeypatch):
     preview_res = client.get("/feeds/preview?url=https://example.com/feed1")
     assert preview_res.status_code == 200
     assert "Feed-Vorschau" in preview_res.text
+
+
+def test_segments_management(client):
+    # 1. Get segments list page
+    res = client.get("/segments")
+    assert res.status_code == 200
+    assert "Wetterbericht" in res.text or "Weather Forecast" in res.text
+
+    # 2. Toggle greeting segment
+    toggle_res = client.post("/segments/toggle", data={"id": "greeting"}, follow_redirects=False)
+    assert toggle_res.status_code == 303
+
+    # 3. Move intro segment up
+    move_res = client.post("/segments/move-up", data={"id": "intro"}, follow_redirects=False)
+    assert move_res.status_code == 303

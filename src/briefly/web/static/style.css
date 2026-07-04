@@ -126,3 +126,8 @@ td {
   opacity: 0.65;
   font-size: 0.85rem;
 }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

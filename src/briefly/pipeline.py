@@ -175,6 +175,20 @@ def run_all(config: Config, episode_date: date | None = None) -> EpisodeManifest
     from datetime import datetime
     from briefly.config import get_user_dir
 
+    # Save running state
+    try:
+        state = {
+            "timestamp": datetime.now().isoformat(),
+            "status": "running",
+            "success": None,
+            "error": None
+        }
+        user_dir = get_user_dir()
+        user_dir.mkdir(parents=True, exist_ok=True)
+        (user_dir / "last_run.json").write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        pass
+
     resolved_date = episode_date or date.today()
     try:
         items = run_collect(config)
@@ -187,6 +201,7 @@ def run_all(config: Config, episode_date: date | None = None) -> EpisodeManifest
         try:
             state = {
                 "timestamp": datetime.now().isoformat(),
+                "status": "success",
                 "success": True,
                 "error": None
             }
@@ -202,6 +217,7 @@ def run_all(config: Config, episode_date: date | None = None) -> EpisodeManifest
         try:
             state = {
                 "timestamp": datetime.now().isoformat(),
+                "status": "failed",
                 "success": False,
                 "error": str(e)
             }
