@@ -1,0 +1,34 @@
+# Beispiel-Konfiguration für Briefly (Daily Cast)
+# Kopieren nach config.yaml und anpassen. Alles, was der Nutzer ändern will,
+# lebt hier – nie im Code (Briefing §2.4).
+
+language:
+  target: en # Zielsprache des Sprechtext-Skripts (Standard: Englisch)
+
+topics:
+  include: [] # Interessens-Kategorien, nach denen kuratiert/gewichtet wird
+  exclude: [] # Ausschluss-Filter, z.B. Krieg, Kriminalität, Katastrophen
+
+sources:
+  inbox:
+    path: data/inbox
+  rss:
+    feeds: [] # Liste von Feed-URLs
+
+segment_profile:
+  - intro
+  - news
+  - topics
+  - outro
+
+llm:
+  provider: ollama
+  model: null # noch offen (Briefing §9, Punkt 2)
+
+tts:
+  provider: local
+  voice: null # noch offen (Briefing §9, Punkt 1)
+
+delivery:
+  provider: local_feed
+  output_dir: output

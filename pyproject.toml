@@ -1,0 +1,29 @@
+[project]
+name = "briefly"
+version = "0.1.0"
+description = "Persönliches tägliches Audio-Briefing (Daily Cast)"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2",
+    "pyyaml",
+    "feedparser",
+    "httpx",
+    "ollama",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/briefly"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# macOS
+.DS_Store
+
+# Projektspezifisch: generierte Artefakte und Nutzerdaten
+output/*
+!output/.gitkeep
+.env
