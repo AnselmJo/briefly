@@ -14,7 +14,7 @@ from pathlib import Path
 
 from briefly.audio import concat_with_chapters, write_chapters_json
 from briefly.config import Config
-from briefly.curation import group_by_segment, select_items
+from briefly.curation import group_by_segment, select_items, update_history
 from briefly.delivery.base import DeliveryTarget
 from briefly.delivery.local_feed import LocalFeedDeliveryTarget
 from briefly.llm.base import LanguageModelProvider
@@ -56,6 +56,7 @@ def run_collect(config: Config) -> list[Item]:
 def run_curate(items: list[Item], config: Config) -> dict[str, list[Item]]:
     """Stufe 2: filtert nach Themen/Ausschluss-Stichwörtern und gruppiert nach Segment."""
     selected = select_items(items, config)
+    update_history(selected)
     return group_by_segment(selected, config.segment_profile)
 
 
