@@ -20,6 +20,7 @@ from briefly.doctor import (
     check_rss_feeds,
     check_voices,
     check_web_server,
+    check_global_briefly,
     color_status,
     run_doctor,
 )
@@ -356,8 +357,30 @@ def test_check_launchd_services():
 @patch("briefly.doctor.check_feed_xml", return_value=CheckResult("Feed XML", True, "OK"))
 @patch("briefly.doctor.check_ffmpeg", return_value=CheckResult("FFmpeg", True, "OK"))
 @patch("briefly.doctor.check_launchd_services", return_value=CheckResult("Launchd", True, "OK"))
+@patch("briefly.doctor.check_global_briefly", return_value=CheckResult("Global PATH", True, "OK"))
 @patch("sys.stdout")
 def test_run_doctor_all_success(*args):
     # Tests full doctor run when all checks succeed
     ret = run_doctor()
     assert ret == 0
+
+
+def test_check_global_briefly_success():
+    with patch("sys.executable", "/project/briefly/.venv/bin/python"), \
+         patch("os.environ", {"PATH": "/usr/local/bin:/project/briefly/.venv/bin"}), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("os.access", return_value=True):
+        res = check_global_briefly()
+        assert res.status is True
+        assert "global erreichbar" in res.details
+
+
+def test_check_global_briefly_failure():
+    with patch("sys.executable", "/project/briefly/.venv/bin/python"), \
+         patch("os.environ", {"PATH": "/project/briefly/.venv/bin"}), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("os.access", return_value=True):
+        res = check_global_briefly()
+        assert res.status is False
+        assert res.is_warning is True
+        assert "nicht global" in res.details

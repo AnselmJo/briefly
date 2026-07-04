@@ -571,6 +571,52 @@ def check_launchd_services() -> CheckResult:
         )
 
 
+def check_global_briefly() -> CheckResult:
+    """Prüft, ob der Befehl 'briefly' global in der PATH-Variable erreichbar ist."""
+    venv_bin = Path(sys.executable).parent
+    paths = os.environ.get("PATH", "").split(os.pathsep)
+    global_ok = False
+    global_path = None
+    
+    for p in paths:
+        if not p:
+            continue
+        try:
+            p_path = Path(p).resolve()
+        except Exception:
+            continue
+        if p_path == venv_bin.resolve():
+            continue
+        for ext in ("", ".exe", ".cmd", ".bat"):
+            candidate = p_path / f"briefly{ext}"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                global_ok = True
+                global_path = candidate
+                break
+        if global_ok:
+            break
+            
+    if global_ok:
+        return CheckResult(
+            name="Globale Erreichbarkeit",
+            status=True,
+            details=f"Befehl 'briefly' ist global erreichbar unter {global_path}",
+        )
+    else:
+        fix_msg = (
+            "Führe den Installer aus (install.sh auf macOS oder install.ps1 auf Windows),\n"
+            "um eine Verknüpfung in ~/.local/bin (bzw. ~/.local/bin/briefly) zu erstellen\n"
+            "und stelle sicher, dass dieser Ordner in deiner PATH-Variable enthalten ist."
+        )
+        return CheckResult(
+            name="Globale Erreichbarkeit",
+            status=False,
+            is_warning=True,
+            details="Der Befehl 'briefly' ist nicht global in der PATH-Variable erreichbar.",
+            fix=fix_msg,
+        )
+
+
 
 def run_doctor() -> int:
     """Führt alle Diagnose-Checks aus und gibt die Status-Tabelle aus."""
@@ -629,6 +675,9 @@ def run_doctor() -> int:
     
     # 15. launchd services
     results.append(check_launchd_services())
+    
+    # 16. Global briefly command check
+    results.append(check_global_briefly())
     
     # Status-Tabelle ausgeben
     print(f"{BOLD}{'Prüfung':<25} {'Status':<15} {'Details'}{RESET}")

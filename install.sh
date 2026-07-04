@@ -109,6 +109,43 @@ else
   "$PROJECT_DIR/.venv/bin/pip" install -e .
 fi
 
+# 5b. Make briefly globally available via symlink
+echo "Making briefly globally available..."
+LOCAL_BIN_DIR="$HOME/.local/bin"
+if [ "$DRY_RUN" = true ]; then
+  run_cmd mkdir -p "$LOCAL_BIN_DIR"
+  run_cmd ln -sf "$PROJECT_DIR/.venv/bin/briefly" "$LOCAL_BIN_DIR/briefly"
+else
+  mkdir -p "$LOCAL_BIN_DIR"
+  ln -sf "$PROJECT_DIR/.venv/bin/briefly" "$LOCAL_BIN_DIR/briefly"
+  echo "Created symlink: $LOCAL_BIN_DIR/briefly -> $PROJECT_DIR/.venv/bin/briefly"
+  
+  # Temporary add to PATH for current session so briefly install can detect it
+  export PATH="$LOCAL_BIN_DIR:$PATH"
+  
+  # Permanently add to shell profile
+  if [ -n "$SHELL" ]; then
+    SHELL_NAME=$(basename "$SHELL")
+    PROFILE_FILE=""
+    if [ "$SHELL_NAME" = "zsh" ]; then
+      PROFILE_FILE="$HOME/.zshrc"
+    elif [ "$SHELL_NAME" = "bash" ]; then
+      if [ -f "$HOME/.bash_profile" ]; then
+        PROFILE_FILE="$HOME/.bash_profile"
+      else
+        PROFILE_FILE="$HOME/.bashrc"
+      fi
+    fi
+
+    if [ -n "$PROFILE_FILE" ]; then
+      if ! grep -q '\.local/bin' "$PROFILE_FILE" 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$PROFILE_FILE"
+        echo "Added ~/.local/bin to PATH in $PROFILE_FILE."
+      fi
+    fi
+  fi
+fi
+
 # 6. Run Briefly installer assistant
 echo "Running setup assistant..."
 INSTALL_ARGS=()

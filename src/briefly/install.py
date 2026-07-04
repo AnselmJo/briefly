@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.util
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -204,6 +205,26 @@ def read_input_from_tty(prompt_message: str, default_if_no_tty: str = "") -> tup
             print("\nNo terminal detected, skipping interactive prompts, defaults applied")
             _TTY_NOTICE_PRINTED = True
         return default_if_no_tty, False
+
+
+def is_briefly_globally_available() -> bool:
+    """Checks if the briefly command is available globally on PATH (outside the active venv bin)."""
+    venv_bin = Path(sys.executable).parent
+    paths = os.environ.get("PATH", "").split(os.pathsep)
+    for p in paths:
+        if not p:
+            continue
+        try:
+            p_path = Path(p).resolve()
+        except Exception:
+            continue
+        if p_path == venv_bin.resolve():
+            continue
+        for ext in ("", ".exe", ".cmd", ".bat"):
+            candidate = p_path / f"briefly{ext}"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return True
+    return False
 
 
 def run_install(interactive: bool = True, assume_yes: bool = False) -> int:
@@ -547,9 +568,20 @@ def run_install(interactive: bool = True, assume_yes: bool = False) -> int:
     print("Briefly ist bereit für den Einsatz!")
     print("\nNÄCHSTE SCHRITTE:")
     
+    # Determine the commands to suggest based on whether briefly command resolves globally
+    if is_briefly_globally_available():
+        briefly_run_cmd = "briefly run"
+        briefly_start_cmd = "briefly start"
+    else:
+        # Fall back to full virtual environment path
+        venv_bin = Path(sys.executable).parent
+        briefly_binary = venv_bin / ("briefly.exe" if sys.platform == "win32" else "briefly")
+        briefly_run_cmd = f'"{briefly_binary}" run'
+        briefly_start_cmd = f'"{briefly_binary}" start'
+        
     # 1. Ersten Lauf erklären
     print("1. Starte den ersten Pipeline-Lauf manuell, um dein erstes Audio-Briefing zu erzeugen:")
-    print("   briefly run")
+    print(f"   {briefly_run_cmd}")
         
     # 2. Webserver starten erklären
     if scheduler_installed:
@@ -558,7 +590,7 @@ def run_install(interactive: bool = True, assume_yes: bool = False) -> int:
         print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
     else:
         print("2. Starte den Webserver im Hintergrund:")
-        print("   briefly start")
+        print(f"   {briefly_start_cmd}")
         print(f"   Du erreichst das Dashboard unter: http://{local_ip}:{web_port}")
         
     # 3. RSS-Feed abonnieren erklären

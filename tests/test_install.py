@@ -496,3 +496,72 @@ def test_read_input_from_tty_eof_dev_tty():
         res, has_tty = read_input_from_tty("Test prompt: ")
         assert res == "n"
         assert has_tty is True
+
+
+def test_is_briefly_globally_available_true():
+    from briefly.install import is_briefly_globally_available
+    # Simulate a path structure where /usr/local/bin contains briefly and is in PATH
+    with patch("sys.executable", "/project/briefly/.venv/bin/python"), \
+         patch("os.environ", {"PATH": "/usr/local/bin:/project/briefly/.venv/bin"}), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("os.access", return_value=True):
+        assert is_briefly_globally_available() is True
+
+
+def test_is_briefly_globally_available_false():
+    from briefly.install import is_briefly_globally_available
+    # PATH only contains active venv bin dir
+    with patch("sys.executable", "/project/briefly/.venv/bin/python"), \
+         patch("os.environ", {"PATH": "/project/briefly/.venv/bin"}), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("os.access", return_value=True):
+        assert is_briefly_globally_available() is False
+
+
+def test_run_install_success_msg_global(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
+         patch("briefly.install.check_piper_voice", return_value=True), \
+         patch("briefly.install.is_briefly_globally_available", return_value=True):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 0
+        captured = capsys.readouterr()
+        # Verify it suggests the global command
+        assert "   briefly run" in captured.out
+        assert "   briefly start" in captured.out
+
+
+def test_run_install_success_msg_local(tmp_path, capsys):
+    project_root = tmp_path / "briefly_project"
+    _setup_mock_project_root(project_root)
+
+    with patch("briefly.install._get_project_root", return_value=project_root), \
+         patch("briefly.install.check_python_dependencies", return_value=[]), \
+         patch("briefly.install.check_disk_space", return_value=(True, "10 GB")), \
+         patch("shutil.which", return_value="/usr/local/bin/ffmpeg"), \
+         patch("subprocess.run") as mock_run, \
+         patch("briefly.install.check_port_availability", return_value=(True, "Frei")), \
+         patch("briefly.install.is_ollama_running", return_value=True), \
+         patch("briefly.install.get_ollama_models", return_value=["qwen3:8b"]), \
+         patch("briefly.install.check_piper_voice", return_value=True), \
+         patch("briefly.install.is_briefly_globally_available", return_value=False):
+         
+        mock_run.return_value = MagicMock(returncode=0)
+        ret = run_install(interactive=False)
+        assert ret == 0
+        captured = capsys.readouterr()
+        # Verify it suggests the full path command
+        assert "run" in captured.out
+        assert "briefly" in captured.out
+        assert "   briefly run" not in captured.out

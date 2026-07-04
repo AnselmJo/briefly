@@ -81,6 +81,31 @@ Run-Command "install Briefly dependencies" {
     & "$projectDir\.venv\Scripts\pip.exe" install -e .
 }
 
+# 5b. Make briefly globally available via wrapper script
+$localBin = "$Home\.local\bin"
+Run-Command "create local bin directory" {
+    if (!(Test-Path $localBin)) {
+        New-Item -ItemType Directory -Path $localBin | Out-Null
+    }
+}
+Run-Command "install briefly.cmd wrapper" {
+    if (!$IsDryRun) {
+        "@echo off`r`n`"$projectDir\.venv\Scripts\briefly.exe`" %*" | Out-File -FilePath "$localBin\briefly.cmd" -Encoding ascii -Force
+    }
+}
+Run-Command "add $localBin to User PATH" {
+    if (!$IsDryRun) {
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$localBin*") {
+            [Environment]::SetEnvironmentVariable("Path", "$userPath;$localBin", "User")
+        }
+        # Temporary add to PATH for current session so briefly install can detect it
+        if ($env:Path -notlike "*$localBin*") {
+            $env:Path += ";$localBin"
+        }
+    }
+}
+
 # 6. Run setup assistant
 Run-Command "run Briefly setup assistant" {
     $installArgs = @()
