@@ -11,12 +11,12 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from briefly import pipeline
-from briefly.config import Config, RssFeedConfig, load_config, save_config
+from briefly.config import Config, RssFeedConfig, load_config, save_config, ConfigValidationError
 
 _APP_DIR = Path(__file__).parent
 _CONFIG_PATH = Path("config.yaml")
@@ -25,6 +25,49 @@ _ALLOWED_EPISODE_SUFFIXES = {".m4b", ".txt", ".json"}
 app = FastAPI(title="Briefly")
 app.mount("/static", StaticFiles(directory=str(_APP_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_APP_DIR / "templates"))
+
+
+@app.exception_handler(ConfigValidationError)
+def config_validation_error_handler(request: Request, exc: ConfigValidationError):
+    import sys
+    print(f"Fehler: Ungültige Konfiguration:\n{exc}", file=sys.stderr)
+    
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html_content = f"""
+        <html>
+            <head>
+                <title>Konfigurationsfehler</title>
+                <style>
+                    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; }}
+                    .error-card {{ border: 1px solid #f5c2c2; background-color: #fcf2f2; padding: 20px; border-radius: 6px; max-width: 600px; margin: auto; }}
+                    h1 {{ color: #d9534f; margin-top: 0; }}
+                    pre {{ background: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; }}
+                    .fix {{ font-weight: bold; color: #2e7d32; }}
+                </style>
+            </head>
+            <body>
+                <div class="error-card">
+                    <h1>Ung&uuml;ltige Konfiguration</h1>
+                    <p><strong>Schl&uuml;ssel:</strong> <code>{exc.key}</code></p>
+                    <p><strong>Ung&uuml;ltiger Wert:</strong> <code>{exc.invalid_value}</code></p>
+                    <p><strong>Fehlermeldung:</strong> {exc.msg}</p>
+                    <p class="fix"><strong>L&ouml;sungsvorschlag:</strong> {exc.fix}</p>
+                    <p><a href="javascript:history.back()">Zur&uuml;ck</a></p>
+                </div>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content, status_code=400)
+    
+    return PlainTextResponse(
+        f"Fehler: Ungültige Konfiguration:\n"
+        f"  Schlüssel:       {exc.key}\n"
+        f"  Ungültiger Wert: {exc.invalid_value}\n"
+        f"  Fehlermeldung:   {exc.msg}\n"
+        f"  Behebung:        {exc.fix}",
+        status_code=400
+    )
 
 
 def _get_config() -> Config:

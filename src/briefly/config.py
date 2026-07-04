@@ -69,6 +69,21 @@ def format_pydantic_error(e: ValidationError) -> ConfigValidationError:
         fix = "Set target_minutes to a positive integer (e.g., 10)."
     elif "profile" in key:
         fix = "Define a list of non-empty segment names (e.g. ['intro', 'news', 'topics', 'outro'])."
+    elif "topics.include" in key or "topics.exclude" in key:
+        fix = "Ensure topics are a list of non-empty strings (e.g., ['news', 'tech'])."
+    elif "exclude_keywords" in key:
+        fix = "Ensure sources.exclude_keywords is a list of non-empty strings."
+    elif "path" in key or "voices_dir" in key or "output_dir" in key:
+        fix = f"Ensure '{key}' is a valid non-empty path."
+    elif "provider" in key:
+        if "llm" in key:
+            fix = "Set llm.provider to 'ollama'."
+        elif "tts" in key:
+            fix = "Set tts.provider to 'piper'."
+        elif "delivery" in key:
+            fix = "Set delivery.provider to 'local_feed'."
+        else:
+            fix = "Use a supported provider for this setting."
     elif err.get("type") == "int_parsing":
         fix = f"Ensure the value for {key} is a valid integer."
     elif err.get("type") == "float_parsing":
@@ -79,6 +94,21 @@ def format_pydantic_error(e: ValidationError) -> ConfigValidationError:
         fix = f"Define the required key '{key}' in your configuration."
 
     return ConfigValidationError(key, invalid_value, msg, fix)
+
+
+def install_excepthook() -> None:
+    def custom_excepthook(type_: type[BaseException], value: BaseException, traceback: Any) -> None:
+        if issubclass(type_, ConfigValidationError):
+            print("Fehler: Ungültige Konfiguration:", file=sys.stderr)
+            print(f"  Schlüssel:       {value.key}", file=sys.stderr)
+            print(f"  Ungültiger Wert: {value.invalid_value}", file=sys.stderr)
+            print(f"  Fehlermeldung:   {value.msg}", file=sys.stderr)
+            print(f"  Behebung:        {value.fix}", file=sys.stderr)
+            sys.exit(1)
+        sys.__excepthook__(type_, value, traceback)
+    sys.excepthook = custom_excepthook
+
+install_excepthook()
 
 
 def check_unknown_keys(data: Any, model_class: type[BaseModel], prefix: str = "") -> list[str]:
@@ -137,9 +167,24 @@ class TopicsConfig(BaseModel):
     include: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
 
+    @field_validator("include", "exclude")
+    @classmethod
+    def validate_topics(cls, v: list[str]) -> list[str]:
+        for item in v:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError("Topics list must contain only non-empty strings")
+        return v
+
 
 class InboxSourceConfig(BaseModel):
     path: Path = Path("data/inbox")
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def validate_path(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("Inbox path cannot be empty")
+        return v
 
 
 class RssFeedConfig(BaseModel):
@@ -150,8 +195,17 @@ class RssFeedConfig(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("RSS feed URL cannot be empty")
         if not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("RSS feed URL must start with http:// or https://")
+        try:
+            from urllib.parse import urlparse
+            result = urlparse(v)
+            if not result.scheme or not result.netloc:
+                raise ValueError("RSS feed URL is not a valid absolute URL")
+        except Exception as e:
+            raise ValueError(f"RSS feed URL is invalid: {e}")
         return v
 
     @field_validator("topic")
@@ -178,6 +232,14 @@ class SourcesConfig(BaseModel):
     rss: RssSourceConfig = Field(default_factory=RssSourceConfig)
     topics: TopicsConfig = Field(default_factory=TopicsConfig)
     exclude_keywords: list[str] = Field(default_factory=lambda: list(DEFAULT_EXCLUDE_KEYWORDS))
+
+    @field_validator("exclude_keywords")
+    @classmethod
+    def validate_exclude_keywords(cls, v: list[str]) -> list[str]:
+        for item in v:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError("Exclude keywords list must contain only non-empty strings")
+        return v
 
 
 class LlmConfig(BaseModel):
@@ -209,6 +271,13 @@ class TtsConfig(BaseModel):
             raise ValueError("Field cannot be empty")
         return v
 
+    @field_validator("voices_dir", mode="before")
+    @classmethod
+    def validate_voices_dir(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("tts.voices_dir cannot be empty")
+        return v
+
     @field_validator("length_scale")
     @classmethod
     def validate_length_scale(cls, v: float | None) -> float | None:
@@ -234,8 +303,24 @@ class DeliveryConfig(BaseModel):
     @field_validator("base_url")
     @classmethod
     def validate_base_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("delivery.base_url cannot be empty")
         if not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("delivery.base_url must start with http:// or https://")
+        try:
+            from urllib.parse import urlparse
+            result = urlparse(v)
+            if not result.scheme or not result.netloc:
+                raise ValueError("delivery.base_url is not a valid absolute URL")
+        except Exception as e:
+            raise ValueError(f"delivery.base_url is invalid: {e}")
+        return v
+
+    @field_validator("output_dir", mode="before")
+    @classmethod
+    def validate_output_dir(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("delivery.output_dir cannot be empty")
         return v
 
     @field_validator("host")
@@ -471,6 +556,12 @@ def load_config(path: Path) -> Config:
 
 def save_config(config: Config, path: Path) -> None:
     """Schreibt eine Config zurück nach YAML."""
+    # Vor dem Speichern den aktuellen Zustand validieren
+    try:
+        Config.model_validate(config.model_dump(mode="json"))
+    except ValidationError as e:
+        raise format_pydantic_error(e) from e
+
     data = config.model_dump(mode="json")
     with Path(path).open("w", encoding="utf-8") as config_file:
         yaml.safe_dump(data, config_file, sort_keys=False, allow_unicode=True)

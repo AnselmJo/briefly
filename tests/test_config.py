@@ -1,4 +1,8 @@
-from briefly.config import Config, load_config, save_config
+from pathlib import Path
+import warnings
+import pytest
+
+from briefly.config import Config, ConfigValidationError, load_config, save_config
 
 
 def test_load_config_applies_defaults_for_missing_fields(tmp_path):
@@ -24,11 +28,6 @@ def test_save_and_reload_roundtrip(tmp_path):
     assert reloaded.topics.include == ["news", "books"]
     assert reloaded.segment_profile == ["intro", "news", "outro"]
 
-
-import pytest
-import warnings
-from pathlib import Path
-from briefly.config import ConfigValidationError
 
 def test_load_valid_config(tmp_path):
     config_path = tmp_path / "config.yaml"
@@ -111,6 +110,16 @@ schedule:
         ("schedule:\n  minute: -1", "schedule.minute"),
         ("sources:\n  rss:\n    feeds:\n      - url: invalid_url", "sources.rss.feeds.0.url"),
         ("sources:\n  rss:\n    feeds:\n      - url: https://ok.com\n        weight: -1", "sources.rss.feeds.0.weight"),
+        ("sources:\n  topics:\n    include: ['']", "sources.topics.include"),
+        ("sources:\n  topics:\n    exclude: ['']", "sources.topics.exclude"),
+        ("sources:\n  exclude_keywords: ['']", "sources.exclude_keywords"),
+        ("sources:\n  inbox:\n    path: ''", "sources.inbox.path"),
+        ("tts:\n  voices_dir: ''", "tts.voices_dir"),
+        ("delivery:\n  output_dir: ''", "delivery.output_dir"),
+        ("llm:\n  provider: invalid", "llm.provider"),
+        ("tts:\n  provider: invalid", "tts.provider"),
+        ("delivery:\n  provider: invalid", "delivery.provider"),
+        ("sources:\n  rss:\n    feeds:\n      - topic: news", "sources.rss.feeds.0.url"),
     ]
 )
 def test_invalid_config_cases(tmp_path, invalid_yaml, expected_key):
@@ -146,4 +155,25 @@ unknown_top_level_key: 'hello'
         
     # Should still load defaults successfully
     assert config.delivery.provider == "local_feed"
+
+
+def test_sys_excepthook(capsys):
+    import sys
+    from briefly.config import ConfigValidationError
+    
+    # Trigger our hook manually
+    exc = ConfigValidationError("some_key", "bad_val", "Msg", "Fix it")
+    
+    with pytest.raises(SystemExit) as exc_info:
+        sys.excepthook(ConfigValidationError, exc, None)
+        
+    assert exc_info.value.code == 1
+    
+    captured = capsys.readouterr()
+    assert "Fehler: Ungültige Konfiguration:" in captured.err
+    assert "some_key" in captured.err
+    assert "bad_val" in captured.err
+    assert "Msg" in captured.err
+    assert "Fix it" in captured.err
+
 
