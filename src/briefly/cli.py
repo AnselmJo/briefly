@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import sys
+
+# Frühe Prüfung auf grundlegende Abhängigkeiten, um unschöne Tracebacks zu vermeiden
+try:
+    import yaml
+    import pydantic
+except ImportError as e:
+    missing_name = e.name if hasattr(e, "name") else "pydantic/pyyaml"
+    print(f"Fehler: Eine oder mehrere erforderliche Python-Abhängigkeiten fehlen ({missing_name}).", file=sys.stderr)
+    print("Behebung: Bitte installiere die Abhängigkeiten mit: pip install -e .", file=sys.stderr)
+    sys.exit(1)
+
 import argparse
 import logging
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -20,19 +31,63 @@ _DEFAULT_CONFIG_PATH = Path("config.yaml")
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    args = _build_parser().parse_args(argv)
-    config = _load_config_or_exit(Path(args.config))
+    try:
+        args = _build_parser().parse_args(argv)
+        
+        if args.command == "install":
+            from briefly.install import run_install
+            return run_install(interactive=True)
 
-    commands = {
-        "run": _run_full,
-        "collect": _run_collect,
-        "curate": _run_curate,
-        "script": _run_script,
-        "audio": _run_audio,
-        "deliver": _run_deliver,
-    }
-    commands[args.command](config)
-    return 0
+        config = _load_config_or_exit(Path(args.config))
+
+        commands = {
+            "run": _run_full,
+            "collect": _run_collect,
+            "curate": _run_curate,
+            "script": _run_script,
+            "audio": _run_audio,
+            "deliver": _run_deliver,
+        }
+        commands[args.command](config)
+        return 0
+    except KeyboardInterrupt:
+        print("\nAbgebrochen durch Benutzer.", file=sys.stderr)
+        return 1
+    except FileNotFoundError as e:
+        if "ffmpeg" in str(e) or (hasattr(e, "filename") and e.filename == "ffmpeg"):
+            print("Fehler: 'ffmpeg' wurde nicht im Systempfad gefunden.", file=sys.stderr)
+            print("Behebung: Bitte installiere ffmpeg (z. B. via 'brew install ffmpeg' auf macOS).", file=sys.stderr)
+        else:
+            print(f"Fehler: Datei nicht gefunden: {e}", file=sys.stderr)
+        return 1
+    except RuntimeError as e:
+        err_msg = str(e)
+        if "ffmpeg" in err_msg:
+            print("Fehler bei der Audio-Verarbeitung mit ffmpeg.", file=sys.stderr)
+            print("Details:", err_msg, file=sys.stderr)
+            print("Behebung: Bitte stelle sicher, dass ffmpeg korrekt installiert und lauffähig ist ('brew install ffmpeg').", file=sys.stderr)
+        else:
+            print(f"Fehler: {err_msg}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        err_type = type(e).__name__
+        err_msg = str(e)
+        if "ConnectError" in err_type or "ConnectTimeout" in err_type or "ConnectionRefusedError" in err_msg or "11434" in err_msg:
+            print("Fehler: Verbindung zum Ollama-Server fehlgeschlagen.", file=sys.stderr)
+            print("Behebung: Stelle sicher, dass Ollama läuft (https://ollama.com).", file=sys.stderr)
+            return 1
+        elif "ResponseError" in err_type or ("model" in err_msg.lower() and "not found" in err_msg.lower()):
+            print("Fehler: Das konfigurierte Ollama-Modell konnte nicht geladen werden.", file=sys.stderr)
+            print("Behebung: Bitte lade das Modell herunter, z.B. via: ollama pull qwen3:8b", file=sys.stderr)
+            return 1
+        elif "ValidationError" in err_type:
+            print("Fehler: Ungültige Konfiguration in config.yaml.", file=sys.stderr)
+            print("Details:", err_msg, file=sys.stderr)
+            print("Behebung: Überprüfe die Werte und Typen in deiner config.yaml.", file=sys.stderr)
+            return 1
+        else:
+            print(f"Unerwarteter Fehler: {e}", file=sys.stderr)
+            return 1
 
 
 def _run_full(config: Config) -> None:
@@ -92,19 +147,24 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="briefly", description="Briefly – tägliches Audio-Briefing")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG_PATH), help="Pfad zur config.yaml")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("run", "collect", "curate", "script", "audio", "deliver"):
+    for name in ("run", "collect", "curate", "script", "audio", "deliver", "install"):
         subparsers.add_parser(name)
     return parser
 
 
 def _load_config_or_exit(path: Path) -> Config:
     if not path.exists():
-        logger.error(
-            "Konfigurationsdatei nicht gefunden: %s. Kopiere config/config.example.yaml nach config.yaml.",
-            path,
-        )
+        print(f"Fehler: Konfigurationsdatei '{path}' nicht gefunden.", file=sys.stderr)
+        print("Behebung: Führe 'briefly install' aus, um das Projekt einzurichten und eine Standard-Konfiguration zu erstellen.", file=sys.stderr)
         sys.exit(1)
-    return load_config(path)
+    try:
+        return load_config(path)
+    except Exception as e:
+        print(f"Fehler: Konfigurationsdatei '{path}' konnte nicht geladen werden.", file=sys.stderr)
+        print("Details:", e, file=sys.stderr)
+        print("Behebung: Überprüfe die YAML-Syntax in deiner Konfiguration.", file=sys.stderr)
+        sys.exit(1)
+
 
 
 if __name__ == "__main__":

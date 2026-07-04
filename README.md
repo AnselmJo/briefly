@@ -20,58 +20,50 @@ die Audiodateien mit Kapitelmarken, keine eigene App.
 - `ffmpeg` installiert (z.B. `brew install ffmpeg`)
 - Piper-Stimmen heruntergeladen (siehe unten)
 
-## Installation
+## Installation und Einrichtung
 
-Repo klonen
-Python installieren
-Ollama installieren + Modell
-Piper-Stimmen runterladen
-config.yaml anpassen
-briefly run
-briefly serve
+Um Briefly einzurichten, führe die folgenden Schritte aus. Der integrierte Setup-Assistent führt dich durch die Diagnose und konfiguriert alle Pfade, Verzeichnisse und optionalen launchd-Hintergrunddienste automatisch.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
+1. **Virtuelle Umgebung erstellen und Abhängigkeiten installieren:**
 
-### Piper-Stimmen herunterladen
-```bash
-ollama serve
-ollama pull qwen3:8b
-```
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -e ".[dev]"
+   ```
 
-Piper-Stimmen (`.onnx` + `.onnx.json`) werden nicht automatisch installiert.
-Für Deutsch und Englisch (Standard-Konfiguration) ins konfigurierte
-`voices_dir` (Default `data/voices/`) legen, z.B.:
+2. **Setup-Assistent ausführen:**
 
-```bash
-mkdir -p data/voices
-python -m piper.download_voices de_DE-thorsten-medium --data-dir data/voices
-python -m piper.download_voices en_US-lessac-medium --data-dir data/voices
-```
+   ```bash
+   briefly install
+   ```
 
-(Falls der Download-Befehl in deiner `piper-tts`-Version anders heißt: die
-Modelle lassen sich auch manuell von den offiziellen Piper-Voice-Quellen
-herunterladen und als `<voice-name>.onnx`/`.onnx.json` nach `data/voices/`
-legen.)
+   Der Assistent prüft:
+   - Fehlende Python-Abhängigkeiten
+   - Ollama-Installation und den Status des Hintergrunddienstes
+   - Vorhandensein des LLM-Modells (Default: `qwen3:8b`)
+   - Download-Status der Piper-Stimmen (DE + EN)
+   - Vorhandensein von `ffmpeg`
+   - Schreibrechte in den Arbeitsverzeichnissen
 
-### Konfiguration
+   Er führt außerdem folgende Schritte automatisch durch:
+   - Erstellt `config.yaml` aus dem Template (und trägt automatisch die lokale IP-Adresse deines Macs für `delivery.base_url` ein)
+   - Erstellt alle benötigten Arbeits- und Ausgabeordner
+   - Generiert die `launchd`-Konfigurationsdateien für macOS in `output/`
+   - Frägt, ob die macOS `launchd`-Dienste installiert werden sollen (für den täglichen nächtlichen Lauf um 05:30 Uhr und den Webserver im Hintergrund)
 
-```bash
-cp config/config.example.yaml config.yaml
-```
+3. **Fehlende Komponenten herunterladen (falls vom Assistenten gemeldet):**
 
-Danach `config.yaml` anpassen: Feeds, Themen, Zielsprache,
-Segment-Reihenfolge – entweder direkt in der Datei oder später komfortabel
-über die Web-Oberfläche unter `/settings`, `/feeds`, `/inbox`.
+   - **Ollama Modell:**
+     ```bash
+     ollama pull qwen3:8b
+     ```
+   - **Piper-Stimmen:**
+     ```bash
+     python -m piper.download_voices de_DE-thorsten-medium --data-dir data/voices
+     python -m piper.download_voices en_US-lessac-medium --data-dir data/voices
+     ```
 
-Für `delivery.base_url` die lokale IP des Macs im Heim-WLAN eintragen:
-
-```bash
-ipconfig getifaddr en0
-```
 
 ## Nutzung
 
