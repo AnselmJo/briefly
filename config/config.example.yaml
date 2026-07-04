@@ -1,20 +1,29 @@
 # Beispiel-Konfiguration für Briefly (Daily Cast)
 # Kopieren nach config.yaml und anpassen. Alles, was der Nutzer ändern will,
-# lebt hier – nie im Code (Briefing §2.4).
+# lebt hier – nie im Code (Briefing §2.4). Alle Felder haben sinnvolle
+# Defaults (siehe src/briefly/config.py); diese Datei zeigt sie explizit.
 
 language:
   target: en # Zielsprache des Sprechtext-Skripts (Standard: Englisch)
 
 topics:
-  include: [] # Interessens-Kategorien, nach denen kuratiert/gewichtet wird
-  exclude: [] # Ausschluss-Filter, z.B. Krieg, Kriminalität, Katastrophen
+  include: [] # Interessens-Kategorien, nach denen kuratiert/gewichtet wird (leer = alle)
+  exclude: [] # zusätzliche Themen, die nie vorkommen sollen
+
+# Themen/Stichwörter, die generell nie vorkommen sollen (Briefing §2.5 Default)
+exclude_keywords: [Krieg, Kriminalität, Katastrophe, war, crime, disaster]
 
 sources:
   inbox:
     path: data/inbox
   rss:
-    feeds: [] # Liste von Feed-URLs
+    feeds:
+      - url: "https://www.tagesschau.de/xml/rss2/"
+        topic: news
+        weight: 1.0
 
+# Reihenfolge der Segmente einer Folge; "topics" bündelt Inbox + Wissens-Themen.
+# Ein zukünftiges "birthdays"-Segment kann hier einfach ergänzt werden.
 segment_profile:
   - intro
   - news
@@ -23,12 +32,26 @@ segment_profile:
 
 llm:
   provider: ollama
-  model: null # noch offen (Briefing §9, Punkt 2)
+  model: qwen3:8b # Alternative: qwen3:14b (mehr RAM, höhere Qualität)
 
 tts:
-  provider: local
-  voice: null # noch offen (Briefing §9, Punkt 1)
+  provider: piper
+  voice_de: de_DE-thorsten-medium
+  voice_en: en_US-lessac-medium
+  # Verzeichnis mit den heruntergeladenen Piper-Stimmen (<name>.onnx + .onnx.json).
+  # Siehe README für den Download-Befehl.
+  voices_dir: data/voices
+
+web:
+  host: 0.0.0.0
+  port: 8787
 
 delivery:
   provider: local_feed
   output_dir: output
+  # Für Feed/Audio-URLs im Heim-WLAN: die lokale IP des Macs eintragen,
+  # z.B. per `ipconfig getifaddr en0` ermitteln. Siehe README.
+  base_url: "http://<mac-lan-ip>:8787"
+
+episode:
+  target_minutes: 10

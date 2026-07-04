@@ -9,6 +9,12 @@ dependencies = [
     "feedparser",
     "httpx",
     "ollama",
+    "piper-tts",
+    "feedgen",
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +22,9 @@ dev = [
     "pytest",
     "ruff",
 ]
+
+[project.scripts]
+briefly = "briefly.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -27,3 +36,6 @@ packages = ["src/briefly"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

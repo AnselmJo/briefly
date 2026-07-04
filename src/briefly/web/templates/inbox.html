@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Inbox</h1>
+<p class="muted">
+  Notizen, Gedanken, Links, Buchzusammenfassungen – wird als Themen-Segment
+  in die nächste Folge aufgenommen.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Datei</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr>
+      <td>{{ entry.name }}</td>
+      <td>
+        <form method="post" action="/inbox/delete" style="margin: 0">
+          <input type="hidden" name="filename" value="{{ entry.name }}" />
+          <button type="submit" class="secondary">Löschen</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="card">
+  <form method="post" action="/inbox">
+    <label for="topic">Thema (optional, z.B. books)</label>
+    <input type="text" id="topic" name="topic" />
+
+    <label for="priority">Priorität (optional, 0 = normal)</label>
+    <input type="number" id="priority" name="priority" value="0" />
+
+    <label for="content">Eintrag</label>
+    <textarea id="content" name="content" required></textarea>
+
+    <button type="submit">Eintrag hinzufügen</button>
+  </form>
+</div>
+{% endblock %}

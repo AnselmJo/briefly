@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Einstellungen</h1>
+
+<form method="post" action="/settings">
+  <label for="language_target">Zielsprache des Sprechtext-Skripts</label>
+  <input type="text" id="language_target" name="language_target" value="{{ config.language.target }}" />
+
+  <label for="segment_profile">Segment-Reihenfolge (eine pro Zeile)</label>
+  <textarea id="segment_profile" name="segment_profile">{{ config.segment_profile | join("\n") }}</textarea>
+
+  <label for="topics_include">Interessens-Themen – Include (eine pro Zeile, leer = alle)</label>
+  <textarea id="topics_include" name="topics_include">{{ config.topics.include | join("\n") }}</textarea>
+
+  <label for="topics_exclude">Themen, die nie vorkommen sollen (eine pro Zeile)</label>
+  <textarea id="topics_exclude" name="topics_exclude">{{ config.topics.exclude | join("\n") }}</textarea>
+
+  <label for="exclude_keywords">Ausschluss-Stichwörter (eine pro Zeile)</label>
+  <textarea id="exclude_keywords" name="exclude_keywords">{{ config.exclude_keywords | join("\n") }}</textarea>
+
+  <button type="submit">Speichern</button>
+</form>
+{% endblock %}

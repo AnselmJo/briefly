@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="card">
+  {% if latest_episode %}
+  <p>Letzte Episode: <strong>{{ latest_episode }}</strong></p>
+  {% else %}
+  <p class="muted">Noch keine Episode erzeugt.</p>
+  {% endif %}
+  <p class="muted">Feed-URL zum Abonnieren (z.B. in AntennaPod, Android):</p>
+  <p><code>{{ feed_url }}</code></p>
+</div>
+
+<form method="post" action="/run">
+  <button type="submit">Jetzt erzeugen</button>
+</form>
+{% endblock %}
