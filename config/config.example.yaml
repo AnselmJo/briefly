@@ -110,6 +110,15 @@ segments:
 # Name des Benutzers für die Begrüßung (Standard: Anselm).
 user_name: Anselm
 
+# --- WEATHER ---
+# Wettervorhersage-Konfiguration (Open-Meteo Integration).
+weather:
+  # Ortsname für die Wettervorhersage (wird einmalig geocodet und gecached).
+  location: Berlin
+  # Optionale manuelle Eingabe von Koordinaten zur Umgehung von Geocoding.
+  # latitude: 52.5243
+  # longitude: 13.4105
+
 # Ziel-Länge des Audio-Briefings in Minuten (Standard: 10).
 target_minutes: 10
 

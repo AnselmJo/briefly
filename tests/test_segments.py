@@ -168,3 +168,110 @@ def test_greeting_segment_de():
     d = date(2026, 12, 31)
     res = segment.script(config, None, None, "de", episode_date=d)
     assert res == "Guten Morgen, Anselm. Es ist Donnerstag, der 31. Dezember."
+
+
+@patch("httpx.get")
+def test_weather_collect_and_geocode(mock_get, tmp_path, monkeypatch):
+    # Mock config user dir to tmp_path
+    monkeypatch.setattr("briefly.segments.get_user_dir", lambda: tmp_path)
+    
+    config = Config()
+    config.weather.location = "Berlin"
+    config.weather.latitude = None
+    config.weather.longitude = None
+    
+    # 1. Geocode API response
+    mock_geocode_resp = MagicMock()
+    mock_geocode_resp.status_code = 200
+    mock_geocode_resp.json.return_value = {
+        "results": [{"latitude": 52.5243, "longitude": 13.4105}]
+    }
+    
+    # 2. Weather API response
+    mock_weather_resp = MagicMock()
+    mock_weather_resp.status_code = 200
+    mock_weather_resp.json.return_value = {
+        "current": {"temperature_2m": 18.5, "weather_code": 3, "wind_speed_10m": 12.0},
+        "daily": {
+            "temperature_2m_max": [22.0],
+            "temperature_2m_min": [14.0],
+            "precipitation_probability_max": [40.0]
+        }
+    }
+    
+    mock_get.side_effect = [mock_geocode_resp, mock_weather_resp]
+    
+    segment = get_segment_impl("weather")
+    data = segment.collect(config)
+    
+    assert data is not None
+    assert data["current"]["temperature_2m"] == 18.5
+    
+    # Verify coordinates cache was saved
+    cache_file = tmp_path / "weather_cache.json"
+    assert cache_file.exists()
+    
+    # 3. Test Cache Hit: calling again should NOT trigger httpx.get because it's cached!
+    mock_get.reset_mock()
+    data_cached = segment.collect(config)
+    assert data_cached == data
+    mock_get.assert_not_called()
+
+
+@patch("httpx.get")
+def test_weather_collect_offline_graceful_degradation(mock_get, tmp_path, monkeypatch):
+    monkeypatch.setattr("briefly.segments.get_user_dir", lambda: tmp_path)
+    
+    config = Config()
+    config.weather.location = "Berlin"
+    config.weather.latitude = None
+    config.weather.longitude = None
+    
+    # Simulate API down/timeout
+    mock_get.side_effect = Exception("Connection timed out")
+    
+    segment = get_segment_impl("weather")
+    data = segment.collect(config)
+    
+    # Should not crash, just returns None
+    assert data is None
+    
+    # Script on None returns empty string
+    res = segment.script(config, data, None, "de")
+    assert res == ""
+
+
+def test_weather_script_en():
+    config = Config()
+    config.weather.location = "Berlin"
+    segment = get_segment_impl("weather")
+    
+    mock_data = {
+        "current": {"temperature_2m": 18.2, "weather_code": 3, "wind_speed_10m": 8.0},
+        "daily": {
+            "temperature_2m_max": [22.4],
+            "temperature_2m_min": [14.1],
+            "precipitation_probability_max": [40.0]
+        }
+    }
+    
+    res = segment.script(config, mock_data, None, "en")
+    assert res == "The weather in Berlin: Currently, it's 18 degrees and overcast. Today's forecast shows a high of 22 degrees and a low of 14 degrees. There is a 40% chance of rain with light winds."
+
+
+def test_weather_script_de():
+    config = Config()
+    config.weather.location = "Berlin"
+    segment = get_segment_impl("weather")
+    
+    mock_data = {
+        "current": {"temperature_2m": 18.2, "weather_code": 3, "wind_speed_10m": 15.0},
+        "daily": {
+            "temperature_2m_max": [22.4],
+            "temperature_2m_min": [14.1],
+            "precipitation_probability_max": [40.0]
+        }
+    }
+    
+    res = segment.script(config, mock_data, None, "de")
+    assert res == "Das Wetter in Berlin: Aktuell sind es 18 Grad und es ist bedeckt. Heute werden Höchstwerte von 22 Grad und Tiefstwerte von 14 Grad erwartet. Die Regenwahrscheinlichkeit liegt bei 40 Prozent bei mäßigem Wind."

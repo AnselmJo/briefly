@@ -350,6 +350,19 @@ class SegmentConfig(BaseModel):
         return v.strip()
 
 
+class WeatherConfig(BaseModel):
+    latitude: float | None = None
+    longitude: float | None = None
+    location: str | None = "Berlin"
+
+    @field_validator("location")
+    @classmethod
+    def validate_location(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("weather.location cannot be empty")
+        return v.strip() if v is not None else None
+
+
 class ScheduleConfig(BaseModel):
     hour: int = 5
     minute: int = 30
@@ -428,11 +441,13 @@ class Config(BaseModel):
     segments: list[SegmentConfig] = Field(default_factory=lambda: [
         SegmentConfig(id="greeting", enabled=True),
         SegmentConfig(id="intro", enabled=True),
+        SegmentConfig(id="weather", enabled=True),
         SegmentConfig(id="news", enabled=True),
         SegmentConfig(id="topics", enabled=True),
         SegmentConfig(id="outro", enabled=True),
     ])
     user_name: str = "Anselm"
+    weather: WeatherConfig = Field(default_factory=WeatherConfig)
     target_minutes: int = 10
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
 
