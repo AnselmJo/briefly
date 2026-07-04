@@ -183,9 +183,9 @@ Hier sind die häufigsten 10 Probleme und wie du sie löst:
 
 <details>
 <summary><b>1. Fehler: "Befehl nicht gefunden" (Command not found)</b></summary>
-Deine virtuelle Python-Umgebung ist nicht aktiv. Führe im Briefly-Ordner aus:
-- **macOS:** `source .venv/bin/activate`
-- **Windows:** `.venv\Scripts\Activate.ps1`
+Der Pfad zu `~/.local/bin` (bzw. `%USERPROFILE%\.local\bin` unter Windows) ist nicht in deiner PATH-Umgebungsvariable enthalten.
+- **macOS:** Stelle sicher, dass `export PATH="$HOME/.local/bin:$PATH"` in deiner `.zshrc` oder `.bash_profile` eingetragen ist (und geladen wurde), oder führe den Installer erneut aus.
+- **Windows:** Starte deine PowerShell neu oder füge `%USERPROFILE%\.local\bin` manuell zur PATH-Umgebungsvariable deines Benutzers hinzu.
 </details>
 
 <details>

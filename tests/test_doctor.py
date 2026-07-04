@@ -372,7 +372,8 @@ def test_check_global_briefly_success():
          patch("os.access", return_value=True):
         res = check_global_briefly()
         assert res.status is True
-        assert "global erreichbar" in res.details
+        assert res.name == "briefly command is globally available"
+        assert res.details == "yes"
 
 
 def test_check_global_briefly_failure():
@@ -383,4 +384,5 @@ def test_check_global_briefly_failure():
         res = check_global_briefly()
         assert res.status is False
         assert res.is_warning is True
-        assert "nicht global" in res.details
+        assert res.name == "briefly command is globally available"
+        assert res.details == "no"

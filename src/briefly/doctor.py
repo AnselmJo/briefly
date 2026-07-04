@@ -598,9 +598,9 @@ def check_global_briefly() -> CheckResult:
             
     if global_ok:
         return CheckResult(
-            name="Globale Erreichbarkeit",
+            name="briefly command is globally available",
             status=True,
-            details=f"Befehl 'briefly' ist global erreichbar unter {global_path}",
+            details="yes",
         )
     else:
         fix_msg = (
@@ -609,10 +609,10 @@ def check_global_briefly() -> CheckResult:
             "und stelle sicher, dass dieser Ordner in deiner PATH-Variable enthalten ist."
         )
         return CheckResult(
-            name="Globale Erreichbarkeit",
+            name="briefly command is globally available",
             status=False,
             is_warning=True,
-            details="Der Befehl 'briefly' ist nicht global in der PATH-Variable erreichbar.",
+            details="no",
             fix=fix_msg,
         )
 
